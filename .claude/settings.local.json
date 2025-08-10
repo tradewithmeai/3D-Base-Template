@@ -60,7 +60,10 @@
       "Bash(move componentFactory.js src/)",
       "Bash(move components.json src/)",
       "Bash(move room-layout.json src/)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(npm run test:schema:*)",
+      "Bash(npm run test:unit:*)",
+      "Bash(npm test)"
     ],
     "deny": []
   }

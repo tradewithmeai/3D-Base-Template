@@ -1,0 +1,19 @@
+{
+  "name": "3d-office-simulator",
+  "version": "1.0.0",
+  "description": "Interactive 3D office environment with modular components",
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run",
+    "test:schema": "node tools/validate-json.js",
+    "test": "npm run test:schema && npm run test:unit"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "typescript": "^5.0.0",
+    "ajv": "^8.12.0"
+  },
+  "keywords": ["3d", "threejs", "office", "simulator"],
+  "author": "3D Office Team",
+  "license": "MIT"
+}
