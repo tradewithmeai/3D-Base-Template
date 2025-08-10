@@ -53,7 +53,14 @@
       "Bash(for file in \"3d office test file.txt\" nul)",
       "Bash(rm:*)",
       "Bash(start:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git lfs:*)",
+      "Bash(move manual-room-build.html src/)",
+      "Bash(move index.html src/)",
+      "Bash(move componentFactory.js src/)",
+      "Bash(move components.json src/)",
+      "Bash(move room-layout.json src/)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }
