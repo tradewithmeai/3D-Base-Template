@@ -108,34 +108,6 @@
                 <div style="margin-top: 10px; font-size: 12px;">
                     Press SPACE or click button to advance
                 </div>
-                
-                <!-- Camera Controls -->
-                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #444;">
-                    <div style="margin-bottom: 10px; font-size: 12px; color: #aaa;">
-                        View: <span id="view-status" style="color: #00ff00; font-weight: bold;">BETH</span>
-                    </div>
-                    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                        <button class="btn" id="beth-view-btn" onclick="setView('BETH')" style="background: #006600; font-size: 11px; padding: 5px 10px;">
-                            📷 Beth
-                        </button>
-                        <button class="btn" id="fps-view-btn" onclick="setView('FPS')" style="background: #333; font-size: 11px; padding: 5px 10px;">
-                            🎮 FPS
-                        </button>
-                    </div>
-                    <div style="font-size: 10px; color: #666;">
-                        Press C to toggle • Beth = visual validation
-                    </div>
-                </div>
-                
-                <!-- Movement Control -->
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444;">
-                    <button class="btn" id="movement-btn" onclick="toggleMovement()" style="background: #333; border-color: #888;">
-                        🎮 Enable Movement
-                    </button>
-                    <div style="margin-top: 5px; font-size: 11px; color: #888;">
-                        Phase 1: FPS view + mouse look only
-                    </div>
-                </div>
             </div>
 
             <div class="assertions" id="assertions">
@@ -153,25 +125,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         // Global scene objects
-        let scene, renderer;
-        let fpsCam, bethCam, cameraHolder;
+        let scene, camera, renderer;
         let currentPhase = 0;
         let roomObjects = {};
-        
-        // Camera system
-        const CameraMode = { FPS: 'FPS', BETH: 'BETH' };
-        let activeMode = CameraMode.BETH; // Default to Beth view for validation
-        
-        // Movement system state
-        const movement = {
-            enabled: false,
-            rigidityTested: false,
-            pointerLockHandlers: []
-        };
-        
-        function getActiveCamera() {
-            return activeMode === CameraMode.FPS ? fpsCam : bethCam;
-        }
         
         // Phase definitions
         const phases = [
@@ -266,8 +222,9 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x222222);
             
-            // Initialize dual camera system
-            initCameraSystem();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(12, 8, 12);
+            camera.lookAt(0, 0, 0);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth - 400, window.innerHeight);
@@ -288,30 +245,11 @@
             // Animation loop
             function animate() {
                 requestAnimationFrame(animate);
-                renderer.render(scene, getActiveCamera());
+                renderer.render(scene, camera);
             }
             animate();
             
-            console.log('🎬 Three.js scene initialized with dual camera system');
-            console.log(`📷 Default view: ${activeMode} (Beth overview for visual validation)`);
-        }
-        
-        function initCameraSystem() {
-            // FPS camera rig for movement
-            cameraHolder = new THREE.Group();
-            cameraHolder.position.set(0, 1.8, 0); // Player eye level, room center
-            
-            fpsCam = new THREE.PerspectiveCamera(75, (window.innerWidth - 400) / window.innerHeight, 0.1, 1000);
-            fpsCam.position.set(0, 0, 0); // Relative to holder
-            cameraHolder.add(fpsCam);
-            scene.add(cameraHolder);
-            
-            // Beth overview camera (fixed position for validation)
-            bethCam = new THREE.PerspectiveCamera(75, (window.innerWidth - 400) / window.innerHeight, 0.1, 1000);
-            bethCam.position.set(12, 8, 12); // Beth's classic overview position
-            bethCam.lookAt(0, 0, 0);         // Look at room center
-            
-            console.log('📷 Dual camera system: FPS rig at [0,1.8,0], Beth overview at [12,8,12]');
+            console.log('🎬 Three.js scene initialized');
         }
 
         // Phase A: Blank Canvas
@@ -1124,273 +1062,12 @@
             if (event.code === 'Space') {
                 event.preventDefault();
                 nextPhase();
-            } else if (event.code === 'KeyC') {
-                // C hotkey to toggle camera views
-                event.preventDefault();
-                const newMode = activeMode === CameraMode.FPS ? CameraMode.BETH : CameraMode.FPS;
-                setView(newMode);
-                console.log(`⌨️ C hotkey pressed - toggled to ${newMode} view`);
             }
         });
 
-        // ========================================
-        // PHASE 1: MOVEMENT SYSTEM + RIGIDITY VALIDATION
-        // ========================================
-        
-        // UI feedback system
-        function showBanner(message, type = 'error') {
-            const banner = document.createElement('div');
-            const colors = {
-                error: '#ff4444',
-                warning: '#ffaa00', 
-                success: '#00ff88'
-            };
-            banner.style.cssText = `
-                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-                background: ${colors[type] || colors.error};
-                color: white; padding: 15px 25px; border-radius: 8px;
-                font-family: 'Courier New', monospace; font-size: 16px;
-                z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            `;
-            banner.textContent = message;
-            document.body.appendChild(banner);
-            
-            // Auto-remove after 10 seconds
-            setTimeout(() => banner.remove(), 10000);
-        }
-        
-        // Stable ID system for rigidity comparison
-        function hashPosition(pos) {
-            return `${pos.x.toFixed(3)}_${pos.y.toFixed(3)}_${pos.z.toFixed(3)}`;
-        }
-        
-        function captureRoomState() {
-            const meshes = scene.children.filter(obj => obj.type === 'Mesh');
-            return {
-                count: meshes.length,
-                objects: meshes.map(m => ({
-                    stableId: `${m.userData?.type || 'unknown'}-${hashPosition(m.position)}`,
-                    type: m.userData?.type,
-                    pos: [m.position.x.toFixed(6), m.position.y.toFixed(6), m.position.z.toFixed(6)],
-                    rot: [m.rotation.x.toFixed(6), m.rotation.y.toFixed(6), m.rotation.z.toFixed(6)],
-                    color: m.material.color.getHex()
-                })).sort((a, b) => a.stableId.localeCompare(b.stableId)),
-                roomObjectKeys: Object.keys(roomObjects).filter(key => roomObjects[key]).sort()
-            };
-        }
-        
-        function deepEqual(a, b) {
-            return JSON.stringify(a) === JSON.stringify(b);
-        }
-        
-        // Room building functions for rigidity testing
-        function clearRoom() {
-            Object.keys(roomObjects).forEach(key => {
-                if (roomObjects[key]) {
-                    scene.remove(roomObjects[key]);
-                    roomObjects[key] = null;
-                }
-            });
-            console.log('🧹 Room cleared via automated sequence');
-        }
-        
-        function buildCompleteRoom() {
-            // Execute exact same sequence as manual phases
-            phaseB();      // Floor
-            phaseCWall1(); // North wall
-            phaseCWall2(); // South wall  
-            phaseCWall3(); // East wall
-            phaseCWall4(); // West wall
-            phaseD();      // Ceiling
-            
-            console.log('🏗️ Complete room built via automated sequence');
-        }
-        
-        // Rigidity validation system
-        function validateRoomIntegrity() {
-            // CRITICAL FIX: Don't run rigidity check on empty scenes
-            const currentMeshCount = scene.children.filter(obj => obj.type === 'Mesh').length;
-            if (currentMeshCount === 0) {
-                console.log('🚫 Skipping rigidity check - scene is empty (Phase A state)');
-                showBanner('ℹ️ Rigidity check skipped - build a room first', 'warning');
-                return;
-            }
-            
-            console.log('🧪 Phase 1 Rigidity Check: Capturing room state...');
-            console.log(`📊 Pre-check: ${currentMeshCount} meshes in scene`);
-            
-            try {
-                const pre = captureRoomState();
-                
-                clearRoom();
-                buildCompleteRoom();
-                
-                const post = captureRoomState();
-                const isIdentical = deepEqual(pre, post);
-                
-                if (isIdentical) {
-                    console.log('✅ Room integrity OK after Phase 1');
-                    showBanner('✅ Phase 1 Rigidity Check PASSED', 'success');
-                } else {
-                    console.error('❌ RIGIDITY FAILURE: Room geometry shifted');
-                    console.log('Pre-state:', pre);
-                    console.log('Post-state:', post);
-                    showBanner('❌ RIGIDITY FAILURE: Room geometry shifted - See console', 'error');
-                    
-                    // HALT execution
-                    window.RIGIDITY_FAILED = true;
-                }
-            } catch (error) {
-                console.error('❌ Rigidity check crashed:', error);
-                showBanner('❌ RIGIDITY CHECK CRASHED - See console', 'error');
-                window.RIGIDITY_FAILED = true;
-            }
-        }
-        
-        // Visual-First Camera Management
-        function setView(mode) {
-            if (mode === CameraMode.FPS) {
-                activeMode = CameraMode.FPS;
-                console.log('📷 Switching to FPS view');
-                
-                // Reset FPS camera position and rotation
-                cameraHolder.position.set(0, 1.8, 0);
-                cameraHolder.rotation.set(0, 0, 0);
-                
-                // Request pointer lock for FPS mode
-                renderer.domElement.requestPointerLock();
-                
-            } else if (mode === CameraMode.BETH) {
-                activeMode = CameraMode.BETH;
-                console.log('📷 Switching to Beth view (visual validation)');
-                
-                // Exit pointer lock if active
-                if (document.pointerLockElement) {
-                    document.exitPointerLock();
-                }
-                
-                // Only trigger rigidity check if we have content to validate
-                if (!movement.rigidityTested && mode === CameraMode.BETH) {
-                    setTimeout(() => {
-                        console.log('🧪 Auto-triggering rigidity check in Beth view');
-                        validateRoomIntegrity();
-                        movement.rigidityTested = true;
-                    }, 100);
-                }
-            }
-            
-            updateViewUI();
-        }
-        
-        function updateViewUI() {
-            const statusEl = document.getElementById('view-status');
-            const bethBtn = document.getElementById('beth-view-btn');
-            const fpsBtn = document.getElementById('fps-view-btn');
-            
-            statusEl.textContent = activeMode;
-            
-            if (activeMode === CameraMode.BETH) {
-                bethBtn.style.background = '#006600';
-                fpsBtn.style.background = '#333';
-                statusEl.style.color = '#00ff88';
-            } else {
-                bethBtn.style.background = '#333';
-                fpsBtn.style.background = '#006600';
-                statusEl.style.color = '#ff8800';
-            }
-        }
-        
-        // Safe pointer-lock system (only active in FPS mode)
-        function setupMouseLook() {
-            const mouseMoveHandler = (e) => {
-                // ONLY apply mouse look if:
-                // 1. Pointer lock is active AND
-                // 2. We're in FPS mode
-                if (document.pointerLockElement === renderer.domElement && 
-                    activeMode === CameraMode.FPS) {
-                    
-                    cameraHolder.rotation.y -= e.movementX * 0.002;
-                    
-                    // One-time rigidity validation on first mouse movement
-                    if (!movement.rigidityTested) {
-                        console.log('🧪 First FPS mouse movement - scheduling rigidity check');
-                        // Switch to Beth view and run check
-                        setTimeout(() => {
-                            setView(CameraMode.BETH);
-                            validateRoomIntegrity();
-                            movement.rigidityTested = true;
-                        }, 1000); // Brief delay to see FPS mode working
-                    }
-                }
-            };
-            
-            document.addEventListener('mousemove', mouseMoveHandler);
-            movement.mouseMoveHandler = mouseMoveHandler;
-        }
-        
-        function cleanupMouseLook() {
-            if (movement.mouseMoveHandler) {
-                document.removeEventListener('mousemove', movement.mouseMoveHandler);
-                movement.mouseMoveHandler = null;
-            }
-        }
-        
-        // Pointer lock event handling
-        function initPointerLockHandlers() {
-            document.addEventListener('pointerlockchange', () => {
-                if (document.pointerLockElement === renderer.domElement) {
-                    console.log('🎯 Pointer lock enabled');
-                    setupMouseLook();
-                } else {
-                    console.log('🔓 Pointer lock disabled');
-                    cleanupMouseLook();
-                }
-            });
-            
-            document.addEventListener('pointerlockerror', () => {
-                console.error('❌ Pointer lock failed - browser blocked');
-                showBanner('Pointer Lock Failed: Browser blocked request', 'warning');
-                
-                // Stay in Beth view and run rigidity check
-                setView(CameraMode.BETH);
-                if (!movement.rigidityTested) {
-                    setTimeout(() => {
-                        validateRoomIntegrity();
-                        movement.rigidityTested = true;
-                    }, 100);
-                }
-            });
-        }
-        
-        // Updated movement control (Phase-1 scope: just switches to FPS)
-        function toggleMovement() {
-            const btn = document.getElementById('movement-btn');
-            
-            if (!movement.enabled) {
-                // Enable Movement = Switch to FPS view
-                movement.enabled = true;
-                btn.textContent = '🔓 Disable Movement';
-                btn.style.background = '#006600';
-                setView(CameraMode.FPS);
-                
-            } else {
-                // Disable Movement = Return to Beth view
-                movement.enabled = false;
-                btn.textContent = '🎮 Enable Movement';
-                btn.style.background = '#333';
-                setView(CameraMode.BETH);
-            }
-        }
-
         // Initialize everything
         initScene();
-        initPointerLockHandlers();
-        updateViewUI(); // Set initial UI state
-        
         console.log('🧪 Manual Room Build Ready - Press SPACE or click Next to begin');
-        console.log('📷 Visual-First Camera System: Beth view (default) | FPS view (movement)');
-        console.log('🎮 Phase 1: Use view buttons or C hotkey to toggle | Enable Movement for FPS mode');
-        console.log('🧪 Rigidity checks automatically run when switching to Beth view');
     </script>
 </body>
 </html>
