@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ iterate-next ]
+
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run schema validation
+        run: npm run test:schema
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run unit tests
+        run: npm run test:unit
+
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+        
+      - name: Start local server
+        run: |
+          python3 -m http.server 3000 &
+          sleep 3
+          
+      - name: Run visual tests
+        run: npm run test:visual
