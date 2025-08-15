@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [ feature/checkpoint-b ]
   pull_request:
     branches: [ iterate-next ]
 
