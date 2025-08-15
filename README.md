@@ -159,4 +159,9 @@ color: 0x87CEEB,  // Sky blue instead of pastel green
 
 **Built with Three.js r128 | Ready for production deployment | Systematic 3D development foundation**
 
+## 🧪 **CI/CD Pipeline**
+- ✅ **Schema validation** - Validates component and layout JSON files
+- ✅ **Unit testing** - Coordinate conversion utilities with 9 test cases  
+- ✅ **Pull request automation** - Two parallel CI jobs (schema, unit)
+
 🌟 **Star this repo if it helps your 3D development projects!**
