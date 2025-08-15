@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "patternProperties": {
+    "^[a-zA-Z][a-zA-Z0-9_]*$": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["plane", "cylinder", "sphere", "box"]
+        },
+        "size": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 4
+        },
+        "material": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "collision": {
+          "type": "boolean"
+        },
+        "rotation": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": ["model", "size", "material", "collision"],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
