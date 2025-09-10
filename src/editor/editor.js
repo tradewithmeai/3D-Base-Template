@@ -2,8 +2,8 @@ class FloorplanEditor {
     constructor() {
         this.canvas = document.getElementById('grid-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.gridWidth = 40;
-        this.gridHeight = 30;
+        this.gridWidth = 60;
+        this.gridHeight = 40;
         this.cellSize = 20;
         this.currentTool = 'empty';
         this.isDrawing = false;
@@ -22,6 +22,15 @@ class FloorplanEditor {
             empty: '#f0f0f0',
             floor: '#8B4513'
         };
+        
+        // Template overlay state
+        this.templateOverlay = null;
+        this.showTemplate = false;
+        
+        // Unit overlay state
+        this.unitsIndex = null;
+        this.selectedUnit = null;
+        this.unitOverlay = null;
         
         this.init();
     }
@@ -100,6 +109,24 @@ class FloorplanEditor {
         
         document.getElementById('clear-btn').addEventListener('click', () => {
             this.clearAll();
+        });
+        
+        // Template overlay controls
+        document.getElementById('load-template-btn')?.addEventListener('click', () => {
+            this.loadTemplate();
+        });
+        
+        document.getElementById('toggle-template-btn')?.addEventListener('click', () => {
+            this.toggleTemplate();
+        });
+        
+        // Units index controls
+        document.getElementById('load-units-btn')?.addEventListener('click', () => {
+            this.loadUnitsIndex();
+        });
+        
+        document.getElementById('unit-select')?.addEventListener('change', (e) => {
+            this.selectUnit(e.target.value);
         });
     }
     
@@ -232,6 +259,12 @@ class FloorplanEditor {
         
         // Render edges
         this.renderEdges();
+        
+        // Render template overlay
+        this.renderTemplate();
+        
+        // Render unit overlay
+        this.renderUnitOverlay();
     }
     
     renderEdges() {
@@ -279,6 +312,34 @@ class FloorplanEditor {
             // Re-render current edge selection in red dashed line for erase preview
             this.ctx.setLineDash([]);
         }
+    }
+    
+    renderTemplate() {
+        if (!this.showTemplate || !this.templateOverlay) return;
+        
+        // Draw ghosted template boundary overlay
+        const templateWidth = this.templateOverlay.width;
+        const templateHeight = this.templateOverlay.height;
+        
+        // Calculate pixel coordinates for template boundary
+        const pixelWidth = templateWidth * this.cellSize;
+        const pixelHeight = templateHeight * this.cellSize;
+        
+        // Draw ghosted boundary rectangle
+        this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Semi-transparent magenta
+        this.ctx.lineWidth = 3;
+        this.ctx.setLineDash([8, 4]);
+        
+        this.ctx.beginPath();
+        this.ctx.strokeRect(0, 0, pixelWidth, pixelHeight);
+        
+        // Reset line dash for other rendering
+        this.ctx.setLineDash([]);
+        
+        // Add template info text
+        this.ctx.fillStyle = 'rgba(255, 0, 255, 0.8)';
+        this.ctx.font = '14px Arial';
+        this.ctx.fillText(`Template: ${templateWidth}×${templateHeight}`, 10, 25);
     }
     
     clearAll() {
@@ -485,6 +546,126 @@ class FloorplanEditor {
             alert('Error reading JSON file: ' + error.message);
             console.error('Import error:', error);
         }
+    }
+    
+    async loadTemplate() {
+        try {
+            const response = await fetch('/floor-plans/mall/mall.json');
+            const templateData = await response.json();
+            
+            if (templateData.gridSize) {
+                this.templateOverlay = templateData.gridSize;
+                this.showTemplate = true;
+                this.render();
+                console.log('Template loaded:', templateData);
+                
+                // Update toggle button text and show it
+                const toggleBtn = document.getElementById('toggle-template-btn');
+                if (toggleBtn) {
+                    toggleBtn.textContent = 'Hide Template';
+                    toggleBtn.style.display = 'inline-block';
+                }
+            } else {
+                alert('Invalid template format. Expected "gridSize" property.');
+            }
+        } catch (error) {
+            alert('Error loading template: ' + error.message);
+            console.error('Template load error:', error);
+        }
+    }
+    
+    toggleTemplate() {
+        if (this.templateOverlay) {
+            this.showTemplate = !this.showTemplate;
+            this.render();
+            
+            // Update toggle button text
+            const toggleBtn = document.getElementById('toggle-template-btn');
+            if (toggleBtn) {
+                toggleBtn.textContent = this.showTemplate ? 'Hide Template' : 'Show Template';
+            }
+        } else {
+            alert('No template loaded. Load a template first.');
+        }
+    }
+    
+    async loadUnitsIndex() {
+        try {
+            const response = await fetch('/floor-plans/mall/units-index.json');
+            const indexData = await response.json();
+            
+            if (indexData.units && Array.isArray(indexData.units)) {
+                this.unitsIndex = indexData.units;
+                console.log(`Units index loaded: ${this.unitsIndex.length} entries`);
+                
+                // Populate dropdown
+                const unitSelect = document.getElementById('unit-select');
+                if (unitSelect) {
+                    // Clear existing options except the first one
+                    unitSelect.innerHTML = '<option value="">Select Unit...</option>';
+                    
+                    // Add unit options
+                    this.unitsIndex.forEach(unit => {
+                        const option = document.createElement('option');
+                        option.value = unit.id;
+                        option.textContent = unit.id;
+                        unitSelect.appendChild(option);
+                    });
+                    
+                    unitSelect.style.display = 'inline-block';
+                }
+            } else {
+                alert('Invalid units index format. Expected "units" array.');
+            }
+        } catch (error) {
+            alert('Error loading units index: ' + error.message);
+            console.error('Units index load error:', error);
+        }
+    }
+    
+    selectUnit(unitId) {
+        if (!unitId) {
+            this.selectedUnit = null;
+            this.unitOverlay = null;
+            this.render();
+            return;
+        }
+        
+        const unit = this.unitsIndex?.find(u => u.id === unitId);
+        if (unit && unit.rect) {
+            this.selectedUnit = unitId;
+            this.unitOverlay = unit.rect;
+            console.log(`Unit overlay: ${unitId} rect ${unit.rect.x},${unit.rect.y},${unit.rect.w},${unit.rect.h}`);
+            this.render();
+        }
+    }
+    
+    renderUnitOverlay() {
+        if (!this.unitOverlay) return;
+        
+        const { x, y, w, h } = this.unitOverlay;
+        
+        // Calculate pixel coordinates for unit boundary
+        const pixelX = x * this.cellSize;
+        const pixelY = y * this.cellSize;
+        const pixelWidth = w * this.cellSize;
+        const pixelHeight = h * this.cellSize;
+        
+        // Draw ghosted unit boundary rectangle
+        this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; // Semi-transparent cyan
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([6, 3]);
+        
+        this.ctx.beginPath();
+        this.ctx.strokeRect(pixelX, pixelY, pixelWidth, pixelHeight);
+        
+        // Reset line dash for other rendering
+        this.ctx.setLineDash([]);
+        
+        // Add unit info text
+        this.ctx.fillStyle = 'rgba(0, 255, 255, 0.9)';
+        this.ctx.font = '12px Arial';
+        this.ctx.fillText(`Unit: ${this.selectedUnit}`, pixelX + 4, pixelY + 16);
     }
 }
 

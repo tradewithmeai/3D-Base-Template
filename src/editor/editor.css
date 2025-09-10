@@ -11,7 +11,7 @@ body {
 }
 
 .editor-container {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
     padding: 20px;
 }
@@ -93,6 +93,47 @@ header h1 {
 
 #clear-btn:hover {
     background: #c82333 !important;
+}
+
+#load-template-btn {
+    background: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+}
+
+#load-template-btn:hover {
+    background: #138496 !important;
+}
+
+#toggle-template-btn {
+    background: #6f42c1 !important;
+    border-color: #6f42c1 !important;
+}
+
+#toggle-template-btn:hover {
+    background: #5a369a !important;
+}
+
+#load-units-btn {
+    background: #fd7e14 !important;
+    border-color: #fd7e14 !important;
+}
+
+#load-units-btn:hover {
+    background: #dc6502 !important;
+}
+
+#unit-select {
+    padding: 8px 12px;
+    border: 1px solid #fd7e14;
+    border-radius: 4px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#unit-select:hover {
+    background: #f8f9fa;
 }
 
 main {
