@@ -191,7 +191,9 @@
     <div id="dev-notice">
         LOCAL DEV MODE<br>
         Ready for Claude Code!<br>
-        <a href="src/editor/index.html" target="_blank" style="color: #00ff00; text-decoration: underline; font-size: 12px;">Open Floorplan Editor</a>
+        <a href="src/editor/index.html" target="_blank" style="color: #00ff00; text-decoration: underline; font-size: 12px;">Open Floorplan Editor</a><br><br>
+        <button id="load-3d-json-btn" style="background: #00ff00; color: #000; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px; cursor: pointer; margin-top: 5px;">Load 3D JSON</button>
+        <input type="file" id="scene3d-file-input" accept=".json" style="display: none;">
     </div>
     
     <!-- UI overlay removed for clean coordinate testing -->
@@ -211,6 +213,7 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="src/runtime/loadFloorplan.browser.js"></script>
+    <script src="src/runtime/importScene3D.js"></script>
     <script>
         console.log('🏢 3D Virtual Mall Simulator - Multi-Office Environment');
         console.log('Central Lobby connecting 3 office spaces!');
@@ -2115,10 +2118,67 @@
         });
         
         animate(0);
-        
+
+        // Load 3D JSON functionality for zzz26 pipe
+        const load3dBtn = document.getElementById('load-3d-json-btn');
+        const scene3dFileInput = document.getElementById('scene3d-file-input');
+
+        load3dBtn.addEventListener('click', () => {
+            scene3dFileInput.click();
+        });
+
+        scene3dFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                console.info('[PIPE] Loading 3D JSON file:', file.name);
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        // Create a blob URL for the file content
+                        const blob = new Blob([e.target.result], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+
+                        // Check for literal debug mode from URL parameter
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const mode = urlParams.get('literal') === '1' ? 'literal' : 'optimized';
+
+                        // Use importScene3D to load and render
+                        const sceneGroup = await window.importScene3D(url, { mode });
+
+                        // Remove any existing scene-3d groups
+                        const existingGroups = scene.children.filter(child => child.name.startsWith('scene-3d-'));
+                        existingGroups.forEach(group => scene.remove(group));
+
+                        // Add new scene
+                        scene.add(sceneGroup);
+
+                        // Position camera to view the imported scene
+                        const box = new THREE.Box3().setFromObject(sceneGroup);
+                        const center = box.getCenter(new THREE.Vector3());
+                        const size = box.getSize(new THREE.Vector3());
+                        const maxDim = Math.max(size.x, size.z);
+
+                        camera.position.set(center.x + maxDim * 1.5, maxDim * 0.8, center.z + maxDim * 1.5);
+                        camera.lookAt(center);
+
+                        console.info('[PIPE] Scene imported and camera positioned');
+
+                        // Cleanup blob URL
+                        URL.revokeObjectURL(url);
+
+                    } catch (error) {
+                        console.error('[PIPE] Error loading 3D JSON:', error);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
         console.log('🚀 3D Office Simulator loaded successfully!');
         console.log('WASD to move, E to interact, SPACE to dance, ESC to exit dialogues');
         console.log('Ready for Claude Code development!');
+        console.log('🔗 Load 3D JSON button ready for zzz26 pipe testing');
     </script>
 </body>
 </html>

@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "description": "3D mall floorplan editor and simulator",
   "scripts": {
-    "start:editor": "npx http-server -c-1 -p 5173 ."
+    "start:editor": "npx http-server -c-1 -p 5173 .",
+    "pipe:demo": "echo 🔗 zzz26 Pipe Demo: && echo 1. Editor: http://127.0.0.1:5173/src/editor/index.html && echo 2. 3D App: http://127.0.0.1:5173/index.html && echo 3. Use Scene (3D Pipe) export → Load in 3D App && npx http-server -c-1 -p 5173 .",
+    "validate:mall": "node scripts/validate-mall.js",
+    "split:units": "node scripts/split-mall-into-units.js --out-dir floor-plans/units_generated",
+    "promote:unit": "node scripts/promote-unit.js",
+    "test:round-trip": "node tests/golden-round-trip.test.js",
+    "test:export": "node tests/test-export-functionality.js",
+    "test:load-template": "node tests/test-load-template-functionality.js"
   },
   "devDependencies": {},
   "dependencies": {}
