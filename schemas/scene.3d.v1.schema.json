@@ -1,0 +1,162 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://3d-mall-editor.com/schemas/scene.3d.v1.schema.json",
+  "title": "Scene 3D v1 Schema",
+  "description": "JSON Schema for scene.3d.v1 format - 2D→3D pipe interchange",
+  "type": "object",
+  "required": ["meta", "units", "bounds", "tiles", "edges", "originOffset"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["schema", "version"],
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "scene.3d.v1"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^1\\.[0-9]+$"
+        },
+        "sourceSchema": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "units": {
+      "type": "object",
+      "required": ["cellMeters", "wallHeightMeters", "wallThicknessMeters", "floorThicknessMeters"],
+      "properties": {
+        "cellMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10
+        },
+        "wallHeightMeters": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20
+        },
+        "wallThicknessMeters": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 2
+        },
+        "floorThicknessMeters": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1
+        },
+        "lengthUnit": {
+          "type": "string",
+          "enum": ["meters", "metres"]
+        },
+        "coordinateSystem": {
+          "type": "string",
+          "enum": ["right-handed-y-up"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "bounds": {
+      "type": "object",
+      "required": ["min", "max", "center"],
+      "properties": {
+        "min": {
+          "$ref": "#/definitions/point3d"
+        },
+        "max": {
+          "$ref": "#/definitions/point3d"
+        },
+        "center": {
+          "$ref": "#/definitions/point3d"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tiles": {
+      "type": "object",
+      "required": ["floor"],
+      "properties": {
+        "floor": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/gridCoordinate"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "edges": {
+      "type": "object",
+      "required": ["horizontal", "vertical"],
+      "properties": {
+        "horizontal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/gridCoordinate"
+          }
+        },
+        "vertical": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/gridCoordinate"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "originOffset": {
+      "type": "object",
+      "required": ["x", "z"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "gridCoordinate": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "point3d": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

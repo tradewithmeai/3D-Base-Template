@@ -33,9 +33,25 @@
             scene3D = jsonOrPath;
         }
 
-        // Validate schema once
+        // Basic schema check
         if (!scene3D.meta || scene3D.meta.schema !== 'scene.3d.v1') {
             throw new Error('Invalid JSON: expected scene.3d.v1 schema');
+        }
+
+        // Validate with warn-only validation
+        if (typeof window.validateScene3D === 'function') {
+            const validation = window.validateScene3D(scene3D);
+            if (validation.count > 0) {
+                console.warn('[VALIDATION]', `${validation.count} issues found in scene.3d.v1 JSON`);
+
+                // Show validation toast/overlay
+                const shouldProceed = await showValidationToast(validation.errors.slice(0, 5));
+                if (!shouldProceed) {
+                    throw new Error('Import cancelled by user due to validation errors');
+                }
+            } else {
+                console.info('[VALIDATION]', 'scene.3d.v1 JSON validation passed');
+            }
         }
 
         // Extract data
@@ -327,6 +343,113 @@
 
     function countVerticalRuns(edges) {
         return coalesceVerticalEdges(edges).length;
+    }
+
+    /**
+     * Show validation toast overlay with errors and user choice
+     * @param {Array} errors - First 5 validation errors
+     * @returns {Promise<boolean>} True if user chooses to proceed, false to cancel
+     */
+    async function showValidationToast(errors) {
+        return new Promise((resolve) => {
+            // Create overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'validation-toast-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+
+            // Create toast
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 20px;
+                max-width: 500px;
+                max-height: 400px;
+                overflow-y: auto;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                font-family: monospace;
+                font-size: 14px;
+            `;
+
+            // Create content
+            const title = document.createElement('h3');
+            title.textContent = 'JSON Validation Issues';
+            title.style.cssText = 'margin: 0 0 15px 0; color: #d73a49;';
+
+            const errorList = document.createElement('div');
+            errorList.style.cssText = 'margin-bottom: 20px; max-height: 200px; overflow-y: auto;';
+
+            errors.forEach(error => {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'margin-bottom: 8px; padding: 8px; background: #f6f8fa; border-radius: 4px;';
+                errorDiv.innerHTML = `<strong>${error.path}:</strong> ${error.message}`;
+                errorList.appendChild(errorDiv);
+            });
+
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.cssText = `
+                padding: 8px 16px;
+                border: 1px solid #d73a49;
+                background: white;
+                color: #d73a49;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+
+            const proceedBtn = document.createElement('button');
+            proceedBtn.textContent = 'Load anyway';
+            proceedBtn.style.cssText = `
+                padding: 8px 16px;
+                border: 1px solid #28a745;
+                background: #28a745;
+                color: white;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+
+            // Event handlers
+            const cleanup = () => {
+                if (overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+
+            cancelBtn.onclick = () => {
+                cleanup();
+                resolve(false);
+            };
+
+            proceedBtn.onclick = () => {
+                cleanup();
+                resolve(true);
+            };
+
+            // Assemble
+            buttonContainer.appendChild(cancelBtn);
+            buttonContainer.appendChild(proceedBtn);
+            toast.appendChild(title);
+            toast.appendChild(errorList);
+            toast.appendChild(buttonContainer);
+            overlay.appendChild(toast);
+
+            // Add to DOM
+            document.body.appendChild(overlay);
+        });
     }
 
     // Expose to global scope
