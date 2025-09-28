@@ -193,6 +193,7 @@
         Ready for Claude Code!<br>
         <a href="src/editor/index.html" target="_blank" style="color: #00ff00; text-decoration: underline; font-size: 12px;">Open Floorplan Editor</a><br><br>
         <button id="load-3d-json-btn" style="background: #00ff00; color: #000; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px; cursor: pointer; margin-top: 5px;">Load 3D JSON</button>
+        <button id="export-gltf" style="background: #ff6600; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px; cursor: pointer; margin-top: 5px; margin-left: 5px;">Export GLTF</button>
         <input type="file" id="scene3d-file-input" accept=".json" style="display: none;">
     </div>
     
@@ -215,6 +216,7 @@
     <script src="src/runtime/loadFloorplan.browser.js"></script>
     <script src="src/runtime/validateScene3D.js"></script>
     <script src="src/runtime/importScene3D.js"></script>
+    <script src="src/runtime/GLTFExporter.js"></script>
     <script>
         console.log('🏢 3D Virtual Mall Simulator - Multi-Office Environment');
         console.log('Central Lobby connecting 3 office spaces!');
@@ -2180,6 +2182,139 @@
         console.log('WASD to move, E to interact, SPACE to dance, ESC to exit dialogues');
         console.log('Ready for Claude Code development!');
         console.log('🔗 Load 3D JSON button ready for zzz26 pipe testing');
+
+        // Export GLTF functionality for zzz26b.2
+        const exportGltfBtn = document.getElementById('export-gltf');
+        let lastImportedGroup = null;
+        let lastImportedMetadata = null;
+
+        // Track imported scene groups
+        const originalImportScene3D = window.importScene3D;
+        window.importScene3D = async function(jsonOrPath, options = {}) {
+            const result = await originalImportScene3D(jsonOrPath, options);
+
+            // Store reference and metadata for export
+            lastImportedGroup = result;
+
+            // Extract metadata from JSON if it's a file path
+            if (typeof jsonOrPath === 'string') {
+                try {
+                    const res = await fetch(jsonOrPath);
+                    const jsonData = await res.json();
+                    lastImportedMetadata = {
+                        spec: "scene.3d.v1",
+                        units: jsonData.units,
+                        originalFile: jsonOrPath.split('/').pop()
+                    };
+                } catch (error) {
+                    console.warn('[EXPORT:GLTF] Could not extract metadata:', error);
+                }
+            } else {
+                lastImportedMetadata = {
+                    spec: "scene.3d.v1",
+                    units: jsonOrPath.units,
+                    originalFile: "imported.scene.3d.v1.json"
+                };
+            }
+
+            return result;
+        };
+
+        exportGltfBtn.onclick = function() {
+            // Check if we're in literal mode
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('literal') === '1') {
+                alert('Export not available in literal mode (?literal=1). Switch to optimized mode to export.');
+                return;
+            }
+
+            // Find current reconstructed scene group
+            const sceneGroups = scene.children.filter(child =>
+                child.name && child.name.startsWith('scene-3d-')
+            );
+
+            if (sceneGroups.length === 0) {
+                alert('No reconstructed scene found. Please load a scene.3d.v1 JSON file first.');
+                return;
+            }
+
+            const targetGroup = sceneGroups[0]; // Use first/latest imported group
+
+            // Generate safe filename
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+            const baseName = lastImportedMetadata?.originalFile?.replace('.json', '') || 'scene';
+            const safeId = baseName.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const filename = `${safeId}.scene.3d.v1.glb`;
+
+            // Count meshes and extract statistics
+            let tileCount = 0;
+            let hRunCount = 0;
+            let vRunCount = 0;
+
+            targetGroup.children.forEach(child => {
+                if (child.name.includes('floors')) {
+                    tileCount += child.children.length;
+                } else if (child.name.includes('walls')) {
+                    child.children.forEach(wall => {
+                        if (wall.name.includes('wall-h-run')) hRunCount++;
+                        if (wall.name.includes('wall-v-run')) vRunCount++;
+                    });
+                }
+            });
+
+            // Embed metadata in userData
+            const metadata = {
+                spec: "scene.3d.v1",
+                units: lastImportedMetadata?.units || {
+                    cellMeters: 1.0,
+                    wallHeightMeters: 3.0,
+                    wallThicknessMeters: 0.2,
+                    floorThicknessMeters: 0.1
+                },
+                counts: {
+                    tiles: tileCount,
+                    hRuns: hRunCount,
+                    vRuns: vRunCount
+                },
+                exportInfo: {
+                    timestamp: new Date().toISOString(),
+                    exporter: "3D-Base-Template zzz26b.2",
+                    mode: "reconstructed"
+                }
+            };
+
+            // Clone group and add metadata to userData
+            const exportGroup = targetGroup.clone();
+            exportGroup.userData = { ...exportGroup.userData, ...metadata };
+
+            // Export as GLB
+            const exporter = new GLTFExporter();
+
+            console.info('[EXPORT:GLTF]', {
+                filename,
+                counts: metadata.counts,
+                units: metadata.units
+            });
+
+            exporter.parse(exportGroup, function(result) {
+                // Create download
+                const blob = new Blob([result], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.info('[EXPORT:GLTF] Download started:', filename);
+            }, { binary: true });
+        };
+
+        console.log('📦 Export GLTF button ready for zzz26b.2 GLB export');
     </script>
 </body>
 </html>
