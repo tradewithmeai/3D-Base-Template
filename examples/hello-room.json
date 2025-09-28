@@ -1,0 +1,28 @@
+{
+  "instances": [
+    {
+      "type": "referencePole",
+      "position": [0, 0.5, 0]
+    },
+    {
+      "type": "lobbyFloor",
+      "position": [1, 0, 1],
+      "rotation": [-1.5707963267948966, 0, 0]
+    },
+    {
+      "type": "lobbyWall",
+      "position": [0, 4, 1],
+      "rotation": [0, 1.5707963267948966, 0]
+    },
+    {
+      "type": "lobbyWall",
+      "position": [1, 4, 0],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "type": "lobbyWall",
+      "position": [2, 4, 1],
+      "rotation": [0, -1.5707963267948966, 0]
+    }
+  ]
+}

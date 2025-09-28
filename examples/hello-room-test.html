@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello Room Test - Minimal 3D Scene</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+        #info {
+            position: absolute; top: 20px; left: 20px; color: white;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
+            font-family: monospace; font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>Hello Room Test</strong><br>
+        2×2 meter room with 3 walls and 1 opening<br>
+        WASD to move, Mouse to look<br>
+        <br>
+        <span id="status">Loading...</span>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="../src/runtime/loadFloorplan.browser.js"></script>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Camera position
+        camera.position.set(3, 2, 3);
+        camera.lookAt(1, 0, 1);
+
+        // Load hello room
+        async function loadHelloRoom() {
+            try {
+                const roomGroup = await loadFloorplan('hello-room.json');
+                scene.add(roomGroup);
+
+                document.getElementById('status').textContent =
+                    `Loaded: ${roomGroup.children.length} groups, ` +
+                    `${roomGroup.children.reduce((sum, group) => sum + group.children.length, 0)} meshes`;
+
+                console.log('✅ Hello room loaded successfully');
+                console.log('📊 Scene contains:', roomGroup);
+
+            } catch (error) {
+                console.error('❌ Failed to load hello room:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Simple controls
+        const keys = {};
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Simple WASD movement
+            if (keys['KeyW']) camera.position.z -= 0.1;
+            if (keys['KeyS']) camera.position.z += 0.1;
+            if (keys['KeyA']) camera.position.x -= 0.1;
+            if (keys['KeyD']) camera.position.x += 0.1;
+
+            renderer.render(scene, camera);
+        }
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        loadHelloRoom();
+        animate();
+    </script>
+</body>
+</html>
