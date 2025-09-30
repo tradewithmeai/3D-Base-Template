@@ -167,6 +167,9 @@
             const mesh = new THREE.Mesh(geometry, wallMaterial);
             mesh.position.set(centerX, centerY, wallZ);
             mesh.name = `wall-h-run-${index}`;
+            mesh.userData.collider = true;
+            mesh.userData.type = 'imported-wall';
+            mesh.userData.source = 'scene.3d.v1';
             group.add(mesh);
         });
 
@@ -182,6 +185,9 @@
             const mesh = new THREE.Mesh(geometry, wallMaterial);
             mesh.position.set(wallX, centerY, centerZ);
             mesh.name = `wall-v-run-${index}`;
+            mesh.userData.collider = true;
+            mesh.userData.type = 'imported-wall';
+            mesh.userData.source = 'scene.3d.v1';
             group.add(mesh);
         });
 
@@ -226,6 +232,9 @@
             const mesh = new THREE.Mesh(geometry, wallMaterial);
             mesh.position.set(x + 0.5, wallHeightUnits / 2, y + 0.5);
             mesh.name = `wall-h-literal-${x}-${y}`;
+            mesh.userData.collider = true;
+            mesh.userData.type = 'imported-wall';
+            mesh.userData.source = 'scene.3d.v1';
             group.add(mesh);
         });
 
@@ -235,6 +244,9 @@
             const mesh = new THREE.Mesh(geometry, wallMaterial);
             mesh.position.set(x + 0.5, wallHeightUnits / 2, y + 0.5);
             mesh.name = `wall-v-literal-${x}-${y}`;
+            mesh.userData.collider = true;
+            mesh.userData.type = 'imported-wall';
+            mesh.userData.source = 'scene.3d.v1';
             group.add(mesh);
         });
 
