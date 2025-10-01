@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test V1 Scene Loader</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #222; }
+        #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 10px; font-family: monospace; font-size: 12px; max-width: 400px; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>Scene 3D v1 Loader Test</h3>
+        <div id="status">Loading...</div>
+        <div id="results"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="src/runtime/loadScene3dV1.browser.js"></script>
+    <script>
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+
+        function log(message) {
+            console.log(message);
+            resultsDiv.innerHTML += message + '<br>';
+        }
+
+        // Override console.log to capture loader output
+        const originalLog = console.log;
+        const originalError = console.error;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            if (args[0] && args[0].includes('[SCENE:v1]')) {
+                log('✅ ' + args.join(' '));
+            }
+        };
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            if (args[0] && args[0].includes('[SCENE:v1]')) {
+                log('❌ ' + args.join(' '));
+            }
+        };
+
+        // Set up Three.js scene
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x222222);
+        document.body.appendChild(renderer.domElement);
+
+        // Add basic lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        scene.add(directionalLight);
+
+        // Test the v1 loader
+        window.loadScene3dV1('/scenes/active.scene.3d.v1.json')
+            .then(sceneGroup => {
+                log(`✅ Scene loaded successfully: ${sceneGroup.name}`);
+                log(`📦 Children: ${sceneGroup.children.length}`);
+
+                scene.add(sceneGroup);
+
+                // Position camera based on bounds
+                if (sceneGroup.bounds) {
+                    const bounds = sceneGroup.bounds;
+                    log(`📏 Bounds: min=(${bounds.min.x},${bounds.min.y},${bounds.min.z}) max=(${bounds.max.x},${bounds.max.y},${bounds.max.z})`);
+                    log(`🎯 Center: (${bounds.center.x},${bounds.center.y},${bounds.center.z})`);
+
+                    const size = bounds.max.clone().sub(bounds.min);
+                    const maxDim = Math.max(size.x, size.z);
+                    const distance = maxDim * 1.5;
+
+                    camera.position.set(
+                        bounds.center.x + distance * 0.7,
+                        bounds.center.y + distance * 0.5,
+                        bounds.center.z + distance * 0.7
+                    );
+                    camera.lookAt(bounds.center);
+
+                    log(`📷 Camera positioned at: (${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)})`);
+                } else {
+                    log('⚠️ No bounds data available for camera positioning');
+                    camera.position.set(15, 10, 15);
+                    camera.lookAt(5, 0, 5);
+                }
+
+                statusDiv.textContent = 'Loaded successfully! Check console for detailed logs.';
+
+                // Count and display components
+                let floorCount = 0, wallCount = 0, gridCount = 0;
+                sceneGroup.traverse(obj => {
+                    if (obj.parent && obj.parent.name === 'floors') floorCount++;
+                    if (obj.parent && obj.parent.name === 'walls') wallCount++;
+                    if (obj.parent && obj.parent.name === 'ghostGrid') gridCount++;
+                });
+
+                log(`🏗️ Components: ${floorCount} floors, ${wallCount} walls, ${gridCount > 0 ? '1 ghost grid' : '0 ghost grids'}`);
+
+                // Verify acceptance criteria
+                log('');
+                log('=== ACCEPTANCE CRITERIA ===');
+                if (sceneGroup.bounds) {
+                    const bounds = sceneGroup.bounds;
+                    const expectedMin = {x: 0, y: 0, z: 0};
+                    const expectedMax = {x: 10, y: 3, z: 10};
+                    const expectedCenter = {x: 5, y: 1.5, z: 5};
+
+                    const minMatch = Math.abs(bounds.min.x - expectedMin.x) < 0.01 &&
+                                   Math.abs(bounds.min.y - expectedMin.y) < 0.01 &&
+                                   Math.abs(bounds.min.z - expectedMin.z) < 0.01;
+                    const maxMatch = Math.abs(bounds.max.x - expectedMax.x) < 0.01 &&
+                                   Math.abs(bounds.max.y - expectedMax.y) < 0.01 &&
+                                   Math.abs(bounds.max.z - expectedMax.z) < 0.01;
+                    const centerMatch = Math.abs(bounds.center.x - expectedCenter.x) < 0.01 &&
+                                      Math.abs(bounds.center.y - expectedCenter.y) < 0.01 &&
+                                      Math.abs(bounds.center.z - expectedCenter.z) < 0.01;
+
+                    log(`✅ Bounds min correct: ${minMatch}`);
+                    log(`✅ Bounds max correct: ${maxMatch}`);
+                    log(`✅ Bounds center correct: ${centerMatch}`);
+                }
+            })
+            .catch(error => {
+                log(`❌ Error loading scene: ${error.message}`);
+                statusDiv.textContent = 'Error loading scene - check console';
+                console.error('Full error:', error);
+            });
+
+        // Render loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
