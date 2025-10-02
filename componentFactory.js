@@ -15,21 +15,20 @@ export function createComponent(type, config, registry, scene) {
         return null;
     }
 
-    // 1. Create geometry based on def.model and runtime size (prefer config.size over def.size)
-    const size = config.size || def.size;
+    // 1. Create geometry based on def.model and def.size
     let geometry;
     switch (def.model) {
         case 'box':
-            geometry = new THREE.BoxGeometry(...size);
+            geometry = new THREE.BoxGeometry(...def.size);
             break;
         case 'plane':
-            geometry = new THREE.PlaneGeometry(...size);
+            geometry = new THREE.PlaneGeometry(...def.size);
             break;
         case 'cylinder':
-            geometry = new THREE.CylinderGeometry(...size);
+            geometry = new THREE.CylinderGeometry(...def.size);
             break;
         case 'sphere':
-            geometry = new THREE.SphereGeometry(...size);
+            geometry = new THREE.SphereGeometry(...def.size);
             break;
         default:
             console.error(`Unsupported geometry type: ${def.model}`);

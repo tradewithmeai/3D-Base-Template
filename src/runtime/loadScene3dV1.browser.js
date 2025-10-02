@@ -27,24 +27,6 @@
     // Wall alignment mode - can be 'flush' or 'centered'
     const WALL_ALIGN_MODE = (new URLSearchParams(window.location?.search || '').get('align') === 'centered') ? 'centered' : 'flush';
 
-    // Floor inset mode - can be 'auto', 'none', or 'custom'
-    // Dev usage: ?floorInset=none (disable), ?floorInset=auto (default), ?floorInset=0.1 (custom inset)
-    const floorInsetParam = new URLSearchParams(window.location?.search || '').get('floorInset');
-    let FLOOR_INSET_MODE = 'auto'; // default
-    let CUSTOM_INSET_VALUE = 0;
-
-    if (floorInsetParam === 'none') {
-        FLOOR_INSET_MODE = 'none';
-    } else if (floorInsetParam === 'auto' || floorInsetParam === null) {
-        FLOOR_INSET_MODE = 'auto';
-    } else if (!isNaN(parseFloat(floorInsetParam))) {
-        FLOOR_INSET_MODE = 'custom';
-        CUSTOM_INSET_VALUE = parseFloat(floorInsetParam);
-    } else {
-        console.warn(`[SCENE:v1:DEV] Invalid floorInset parameter: "${floorInsetParam}". Using default: auto`);
-        FLOOR_INSET_MODE = 'auto';
-    }
-
     /**
      * Convert v1 scene data to internal Layout format for existing builders
      */
@@ -117,9 +99,9 @@
     }
 
     /**
-     * Build floors with optional interior inset for wall thickness
+     * Build floors with gap-free EPS overlap
      */
-    function buildFloorsV1(layout, cellMeters, floorThickness, wallThickness = 0) {
+    function buildFloorsV1(layout, cellMeters, floorThickness) {
         const { width, height, cells } = layout;
 
         // Create lookup map for fast cell access
@@ -141,7 +123,6 @@
 
         // Track processed tiles to avoid duplicates
         const processed = new Set();
-        let stripCount = 0;
 
         // Process each row to find contiguous floor strips
         for (let y = 0; y < height; y++) {
@@ -162,29 +143,11 @@
                     checkX++;
                 }
 
-                // Apply interior inset based on dev toggle mode
-                let inset = 0;
-                if (FLOOR_INSET_MODE === 'auto') {
-                    inset = wallThickness;
-                } else if (FLOOR_INSET_MODE === 'custom') {
-                    inset = CUSTOM_INSET_VALUE;
-                } else if (FLOOR_INSET_MODE === 'none') {
-                    inset = 0;
-                }
-                const widthM = stripLength * cellMeters - inset;
-                const depthM = cellMeters - inset;
-
-                // Log floor dimensions on first strip for debugging
-                if (x === 0 && y === 0) {
-                    console.log(`[SCENE:v1:FLOORS] insetMode=${FLOOR_INSET_MODE} wallThickness=${wallThickness}m inset=${inset}m`);
-                    console.log(`[SCENE:v1:FLOORS] stripDims: ${widthM}×${depthM}m (${stripLength}×1 cells - ${inset}m inset)`);
-                }
-
-                // Create floor geometry with optional interior inset
+                // Create floor geometry with EPS overlap to prevent seams
                 const geometry = new THREE.BoxGeometry(
-                    widthM,      // Strip width (possibly inset)
+                    stripLength * cellMeters + SEAM_EPS, // Add EPS for overlap
                     floorThickness,
-                    depthM       // Strip depth (possibly inset)
+                    cellMeters + SEAM_EPS // Add EPS for overlap
                 );
 
                 const material = new THREE.MeshStandardMaterial({
@@ -209,16 +172,9 @@
                 );
 
                 floorsGroup.add(floor);
-                stripCount++;
-
-                // Log sample strips for debugging
-                if (stripCount <= 3) {
-                    console.log(`[SCENE:v1:FLOORS] Strip ${stripCount}: (${x},${y}) ${stripLength}×1 cells → ${widthM.toFixed(2)}×${depthM.toFixed(2)}m @ (${(cellCenterX * cellMeters).toFixed(1)},${(floorThickness / 2).toFixed(1)},${(cellCenterY * cellMeters).toFixed(1)})`);
-                }
             }
         }
 
-        console.log(`[SCENE:v1:FLOORS] Summary: ${stripCount} strips covering ${layout.cells.length} tiles`);
         return floorsGroup;
     }
 
@@ -264,8 +220,6 @@
         if (edges.length > 0) {
             console.log(`[SCENE:v1:WALLS] align=${WALL_ALIGN_MODE === 'flush' ? 'inner-face-flush' : 'centered'} thickness=${wallThickness}m eps=${unitAwareEPS}m`);
         }
-
-        let wallCount = 0;
 
         // Process each edge
         edges.forEach((edge, index) => {
@@ -364,10 +318,8 @@
             wall.position.copy(position);
 
             wallsGroup.add(wall);
-            wallCount++;
         });
 
-        console.log(`[SCENE:v1:WALLS] Summary: ${wallCount} walls created (${edges.filter(e => e.dir === 'H').length}H + ${edges.filter(e => e.dir === 'V').length}V)`);
         return wallsGroup;
     }
 
@@ -485,43 +437,22 @@
         const { units, meta } = scene;
         const { cellMeters, wallHeightMeters, wallThicknessMeters, floorThicknessMeters } = units;
 
-        // Log dev toggle states at scene load
-        let insetDesc = '';
-        if (FLOOR_INSET_MODE === 'auto') {
-            insetDesc = `auto (${wallThicknessMeters}m)`;
-        } else if (FLOOR_INSET_MODE === 'custom') {
-            insetDesc = `custom (${CUSTOM_INSET_VALUE}m)`;
-        } else {
-            insetDesc = 'none (0m)';
-        }
-        console.log(`[SCENE:v1:DEV] Dev toggles: floorInset=${insetDesc} wallAlign=${WALL_ALIGN_MODE}`);
-
         // Convert v1 data to internal format
         const layout = v1ToLayout(scene);
         const edges = v1ToEdges(scene, layout);
 
-        // Enhanced logging for coordinate conversion
-        console.log(`[SCENE:v1:CONVERT] Layout: ${layout.width}×${layout.height} cells, ${layout.cells.length} floor tiles`);
-        console.log(`[SCENE:v1:CONVERT] Edges: ${edges.length} total (H+V), originOffset=(${scene.originOffset.x},${scene.originOffset.y})`);
-
         // Build geometry using adapted builders
-        console.log(`[SCENE:v1:BUILD] Starting geometry build: floors + walls`);
-        const floorsGroup = buildFloorsV1(layout, cellMeters, floorThicknessMeters, wallThicknessMeters);
-        console.log(`[SCENE:v1:BUILD] Floors: ${floorsGroup.children.length} meshes created`);
-
+        const floorsGroup = buildFloorsV1(layout, cellMeters, floorThicknessMeters);
         const wallsGroup = buildWallsV1(edges, cellMeters, wallHeightMeters, wallThicknessMeters, scene);
-        console.log(`[SCENE:v1:BUILD] Walls: ${wallsGroup.children.length} meshes created`);
 
         // Compute bounds
         const bounds = computeBounds(scene);
-        console.log(`[SCENE:v1:BOUNDS] Content bounds: (${bounds.min.x.toFixed(1)},${bounds.min.y.toFixed(1)},${bounds.min.z.toFixed(1)}) → (${bounds.max.x.toFixed(1)},${bounds.max.y.toFixed(1)},${bounds.max.z.toFixed(1)})`);
 
         // Create root group
         const sceneGroup = new THREE.Group();
         sceneGroup.name = "scene3d_v1";
         sceneGroup.add(floorsGroup);
         sceneGroup.add(wallsGroup);
-        console.log(`[SCENE:v1:BUILD] Scene assembly complete: ${sceneGroup.children.length} groups`);
 
         // Add to mount if provided
         if (opts.mount) {
