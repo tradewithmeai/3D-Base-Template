@@ -24,6 +24,9 @@
     const SEAM_EPS = 0.001; // Small overlap to prevent seams between adjacent geometry
     const GRID_OFFSET_Y = 0.001; // Offset for grid lines to prevent z-fighting
 
+    // Wall alignment mode - can be 'flush' or 'centered'
+    const WALL_ALIGN_MODE = (new URLSearchParams(window.location?.search || '').get('align') === 'centered') ? 'centered' : 'flush';
+
     /**
      * Convert v1 scene data to internal Layout format for existing builders
      */
@@ -176,11 +179,32 @@
     }
 
     /**
-     * Build walls with gap-free EPS overlap
+     * Build walls with interior-aware alignment (inner face flush)
      */
-    function buildWallsV1(edges, cellMeters, wallHeight, wallThickness) {
+    function buildWallsV1(edges, cellMeters, wallHeight, wallThickness, scene) {
         const wallsGroup = new THREE.Group();
         wallsGroup.name = "walls";
+
+        // Build fast tile lookup for interior detection using normalized coordinates
+        const tileSet = new Set();
+
+        // Use the same normalization as v1ToLayout to build tile lookup
+        const offsetTiles = scene.tiles.floor.map(([x, y]) => [x + scene.originOffset.x, y + scene.originOffset.y]);
+        const minX = offsetTiles.length > 0 ? Math.min(...offsetTiles.map(([x]) => x)) : 0;
+        const minY = offsetTiles.length > 0 ? Math.min(...offsetTiles.map(([, y]) => y)) : 0;
+
+        offsetTiles.forEach(([x, y]) => {
+            const normalizedX = x - minX;
+            const normalizedY = y - minY;
+            tileSet.add(`${normalizedX},${normalizedY}`);
+        });
+
+        function hasTile(x, y) {
+            return tileSet.has(`${x},${y}`);
+        }
+
+        // Unit-aware EPS
+        const unitAwareEPS = SEAM_EPS * cellMeters;
 
         // Single material for all walls
         const material = new THREE.MeshStandardMaterial({
@@ -192,42 +216,101 @@
             side: THREE.DoubleSide
         });
 
+        // Log wall alignment mode once
+        if (edges.length > 0) {
+            console.log(`[SCENE:v1:WALLS] align=${WALL_ALIGN_MODE === 'flush' ? 'inner-face-flush' : 'centered'} thickness=${wallThickness}m eps=${unitAwareEPS}m`);
+        }
+
         // Process each edge
-        edges.forEach(edge => {
+        edges.forEach((edge, index) => {
             let geometry;
             let position;
 
             if (edge.dir === 'H') {
-                // Horizontal edge: oriented along +X
-                // Add EPS extension to meet floors without gaps
+                // Horizontal edge: oriented along +X, spans (x,y) → (x+1,y)
                 geometry = new THREE.BoxGeometry(
-                    cellMeters + SEAM_EPS,      // Length with EPS extension
-                    wallHeight,            // Height
-                    wallThickness          // Thickness
+                    cellMeters,  // Exact cell length - no EPS extension
+                    wallHeight,                 // Height
+                    wallThickness              // Thickness
                 );
-                // Centre at (x+0.5, y) in cell space
-                const cellCenterX = edge.x + 0.5;
-                const cellCenterY = edge.y;
+
+                let centreX, centreZ;
+
+                if (WALL_ALIGN_MODE === 'flush') {
+                    // Interior-aware placement
+                    const interiorBelow = hasTile(edge.x, edge.y - 1) && !hasTile(edge.x, edge.y);
+                    const interiorAbove = hasTile(edge.x, edge.y) && !hasTile(edge.x, edge.y - 1);
+
+                    let outwardSignZ = 0;  // Default: centered (partition/unknown)
+                    let interiorSide = 'unknown';
+
+                    if (interiorBelow && !interiorAbove) {
+                        outwardSignZ = 1;  // Push wall outward (positive Z)
+                        interiorSide = 'below';
+                    } else if (interiorAbove && !interiorBelow) {
+                        outwardSignZ = -1; // Push wall outward (negative Z)
+                        interiorSide = 'above';
+                    }
+
+                    // Log sample edge for debugging (first edge or edge at x=0)
+                    if (index === 0 || edge.x === 0) {
+                        console.log(`[SCENE:v1:WALLS] Sample H-edge x=${edge.x} y=${edge.y}: interior=${interiorSide} outwardSign=${outwardSignZ}`);
+                    }
+
+                    centreX = edge.x + 0.5;
+                    centreZ = edge.y + (outwardSignZ * wallThickness / (2 * cellMeters));
+                } else {
+                    // Centered mode (old behavior)
+                    centreX = edge.x + 0.5;
+                    centreZ = edge.y;
+                }
+
+                // Use normalized coordinates (like floors) - originOffset already applied in v1ToEdges
                 position = new THREE.Vector3(
-                    cellCenterX * cellMeters,
+                    centreX * cellMeters,
                     wallHeight / 2,
-                    cellCenterY * cellMeters
+                    centreZ * cellMeters
                 );
+
             } else {
-                // Vertical edge: oriented along +Z
-                // Add EPS extension to meet floors without gaps
+                // Vertical edge: oriented along +Z, spans (x,y) → (x,y+1)
                 geometry = new THREE.BoxGeometry(
-                    wallThickness,         // Thickness
-                    wallHeight,            // Height
-                    cellMeters + SEAM_EPS       // Length with EPS extension
+                    wallThickness,             // Thickness
+                    wallHeight,                // Height
+                    cellMeters  // Exact cell length - no EPS extension
                 );
-                // Centre at (x, y+0.5) in cell space
-                const cellCenterX = edge.x;
-                const cellCenterY = edge.y + 0.5;
+
+                let centreX, centreZ;
+
+                if (WALL_ALIGN_MODE === 'flush') {
+                    // Interior-aware placement
+                    const interiorLeft = hasTile(edge.x - 1, edge.y) && !hasTile(edge.x, edge.y);
+                    const interiorRight = hasTile(edge.x, edge.y) && !hasTile(edge.x - 1, edge.y);
+
+                    let outwardSignX = 0;  // Default: centered (partition/unknown)
+                    let interiorSide = 'unknown';
+
+                    if (interiorLeft && !interiorRight) {
+                        outwardSignX = 1;  // Push wall outward (positive X)
+                        interiorSide = 'left';
+                    } else if (interiorRight && !interiorLeft) {
+                        outwardSignX = -1; // Push wall outward (negative X)
+                        interiorSide = 'right';
+                    }
+
+                    centreX = edge.x + (outwardSignX * wallThickness / (2 * cellMeters));
+                    centreZ = edge.y + 0.5;
+                } else {
+                    // Centered mode (old behavior)
+                    centreX = edge.x;
+                    centreZ = edge.y + 0.5;
+                }
+
+                // Use normalized coordinates (like floors) - originOffset already applied in v1ToEdges
                 position = new THREE.Vector3(
-                    cellCenterX * cellMeters,
+                    centreX * cellMeters,
                     wallHeight / 2,
-                    cellCenterY * cellMeters
+                    centreZ * cellMeters
                 );
             }
 
@@ -360,7 +443,7 @@
 
         // Build geometry using adapted builders
         const floorsGroup = buildFloorsV1(layout, cellMeters, floorThicknessMeters);
-        const wallsGroup = buildWallsV1(edges, cellMeters, wallHeightMeters, wallThicknessMeters);
+        const wallsGroup = buildWallsV1(edges, cellMeters, wallHeightMeters, wallThicknessMeters, scene);
 
         // Compute bounds
         const bounds = computeBounds(scene);
