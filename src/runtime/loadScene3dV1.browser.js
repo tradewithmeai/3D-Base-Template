@@ -161,8 +161,8 @@
                 const floor = new THREE.Mesh(geometry, material);
 
                 // Position at strip centre in world coordinates
-                // Cell centre: (x + stripLength/2 - 0.5, y + 0.5) in cell space
-                const cellCenterX = x + stripLength / 2 - 0.5;
+                // Cell centre: (x + stripLength/2, y + 0.5) in cell space
+                const cellCenterX = x + stripLength / 2;
                 const cellCenterY = y + 0.5;
 
                 floor.position.set(
