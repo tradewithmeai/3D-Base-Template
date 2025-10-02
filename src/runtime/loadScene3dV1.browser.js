@@ -18,42 +18,6 @@
     const SCENE_DEBUG = false;
 
     /**
-     * Build a ghost grid overlay showing the editor grid
-     */
-    function buildGhostGrid(gridW, gridH, cellMeters) {
-        const gridGroup = new THREE.Group();
-        gridGroup.name = "ghostGrid";
-
-        const material = new THREE.LineBasicMaterial({
-            color: 0x404040,
-            transparent: true,
-            opacity: 0.3
-        });
-
-        const points = [];
-
-        // Vertical lines (along Z-axis)
-        for (let x = 0; x <= gridW; x++) {
-            const worldX = x * cellMeters;
-            points.push(new THREE.Vector3(worldX, 0.001, 0));
-            points.push(new THREE.Vector3(worldX, 0.001, gridH * cellMeters));
-        }
-
-        // Horizontal lines (along X-axis)
-        for (let y = 0; y <= gridH; y++) {
-            const worldZ = y * cellMeters;
-            points.push(new THREE.Vector3(0, 0.001, worldZ));
-            points.push(new THREE.Vector3(gridW * cellMeters, 0.001, worldZ));
-        }
-
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const lines = new THREE.LineSegments(geometry, material);
-        gridGroup.add(lines);
-
-        return gridGroup;
-    }
-
-    /**
      * Convert v1 scene data to internal Layout format for existing builders
      */
     function v1ToLayout(scene) {
@@ -125,10 +89,11 @@
     }
 
     /**
-     * Build floors with proper v1 scaling and positioning
+     * Build floors with gap-free EPS overlap
      */
     function buildFloorsV1(layout, cellMeters, floorThickness) {
         const { width, height, cells } = layout;
+        const EPS = 0.001; // Small overlap to prevent seams
 
         // Create lookup map for fast cell access
         const cellMap = new Map();
@@ -169,18 +134,19 @@
                     checkX++;
                 }
 
-                // Create floor geometry: thin box with proper thickness
+                // Create floor geometry with EPS overlap to prevent seams
                 const geometry = new THREE.BoxGeometry(
-                    stripLength * cellMeters,
+                    stripLength * cellMeters + EPS, // Add EPS for overlap
                     floorThickness,
-                    cellMeters
+                    cellMeters + EPS // Add EPS for overlap
                 );
+
                 const material = new THREE.MeshStandardMaterial({
                     color: 0x8B4513, // Brown color
                     roughness: 0.8,
                     metalness: 0.0,
-                    transparent: true,
-                    opacity: 0.9
+                    receiveShadow: true,
+                    side: THREE.DoubleSide
                 });
 
                 const floor = new THREE.Mesh(geometry, material);
@@ -204,17 +170,21 @@
     }
 
     /**
-     * Build walls with proper v1 scaling and positioning
+     * Build walls with gap-free EPS overlap
      */
     function buildWallsV1(edges, cellMeters, wallHeight, wallThickness) {
         const wallsGroup = new THREE.Group();
         wallsGroup.name = "walls";
+        const EPS = 0.001; // Small extension to meet floors without gaps
 
         // Single material for all walls
         const material = new THREE.MeshStandardMaterial({
             color: 0x808080, // Gray color
             roughness: 0.7,
-            metalness: 0.0
+            metalness: 0.0,
+            castShadow: true,
+            receiveShadow: true,
+            side: THREE.DoubleSide
         });
 
         // Process each edge
@@ -224,8 +194,12 @@
 
             if (edge.dir === 'H') {
                 // Horizontal edge: oriented along +X
-                // Length = cellMeters, width = wallThickness, height = wallHeight
-                geometry = new THREE.BoxGeometry(cellMeters, wallHeight, wallThickness);
+                // Add EPS extension to meet floors without gaps
+                geometry = new THREE.BoxGeometry(
+                    cellMeters + EPS,      // Length with EPS extension
+                    wallHeight,            // Height
+                    wallThickness          // Thickness
+                );
                 // Centre at (x+0.5, y) in cell space
                 const cellCenterX = edge.x + 0.5;
                 const cellCenterY = edge.y;
@@ -236,8 +210,12 @@
                 );
             } else {
                 // Vertical edge: oriented along +Z
-                // Length = cellMeters, width = wallThickness, height = wallHeight
-                geometry = new THREE.BoxGeometry(wallThickness, wallHeight, cellMeters);
+                // Add EPS extension to meet floors without gaps
+                geometry = new THREE.BoxGeometry(
+                    wallThickness,         // Thickness
+                    wallHeight,            // Height
+                    cellMeters + EPS       // Length with EPS extension
+                );
                 // Centre at (x, y+0.5) in cell space
                 const cellCenterX = edge.x;
                 const cellCenterY = edge.y + 0.5;
@@ -379,11 +357,6 @@
         const floorsGroup = buildFloorsV1(layout, cellMeters, floorThicknessMeters);
         const wallsGroup = buildWallsV1(edges, cellMeters, wallHeightMeters, wallThicknessMeters);
 
-        // Build ghost grid
-        const gridW = meta.simLimits?.maxTilesX || 60;
-        const gridH = meta.simLimits?.maxTilesY || 40;
-        const ghostGrid = buildGhostGrid(gridW, gridH, cellMeters);
-
         // Compute bounds
         const bounds = computeBounds(scene);
 
@@ -392,7 +365,6 @@
         sceneGroup.name = "scene3d_v1";
         sceneGroup.add(floorsGroup);
         sceneGroup.add(wallsGroup);
-        sceneGroup.add(ghostGrid);
 
         // Add to mount if provided
         if (opts.mount) {

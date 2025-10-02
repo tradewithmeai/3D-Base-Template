@@ -11,7 +11,18 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git rev-parse:*)",
-      "Bash(sha256sum:*)"
+      "Bash(sha256sum:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(node -e \"\nconst fs = require(''fs'');\n// Load the validator (remove browser-specific code)\nconst validatorCode = fs.readFileSync(''src/runtime/validateScene3D.js'', ''utf8'')\n  .replace(''window.validateScene3D = validateScene3D;'', ''module.exports = validateScene3D;'')\n  .replace(''window.'', ''global.'')\n  .replace(''console.log'', ''// console.log'');\neval(validatorCode);\n\n// Test valid JSON\nconst validJson = JSON.parse(fs.readFileSync(''examples/pipe/unit-2x3.scene.3d.v1.json'', ''utf8''));\nconst validResult = validateScene3D(validJson);\nconsole.log(''Valid JSON validation:'', JSON.stringify(validResult, null, 2));\n\n// Test invalid JSON\nconst invalidJson = JSON.parse(fs.readFileSync(''examples/pipe/invalid-test.scene.3d.v1.json'', ''utf8''));\nconst invalidResult = validateScene3D(invalidJson);\nconsole.log(''Invalid JSON validation:'', JSON.stringify(invalidResult, null, 2));\n\")",
+      "Bash(node:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git log:*)",
+      "Bash(git grep:*)",
+      "Bash(gh api:*)",
+      "Bash(git tag:*)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []
