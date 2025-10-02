@@ -342,6 +342,10 @@
         let sceneV1 = null;
         let ghostGrid = null;
         let currentWorldBounds = null;
+        let currentContentBounds = null;
+        let currentEnvBounds = null;
+        let parityOverlay = null;
+        let parityOverlayVisible = false;
 
         // ========================================================================
         // SCENE CLEARING AND ENVIRONMENT SETUP
@@ -352,10 +356,12 @@
          */
         function clearSceneForImport(scene) {
             console.log('[SCENE:CLEAR] Starting scene clear for import');
+            let meshCount = 0;
 
-            // Remove sceneV1 group
+            // Count and remove sceneV1 group
             if (sceneV1) {
                 sceneV1.traverse((child) => {
+                    if (child instanceof THREE.Mesh) meshCount++;
                     if (child.geometry) child.geometry.dispose();
                     if (child.material) {
                         if (Array.isArray(child.material)) {
@@ -364,31 +370,40 @@
                             child.material.dispose();
                         }
                     }
+                    if (child.texture) child.texture.dispose();
                 });
                 scene.remove(sceneV1);
                 sceneV1 = null;
             }
 
-            // Remove ghostGrid group
+            // Count and remove ghostGrid group
             if (ghostGrid) {
                 ghostGrid.traverse((child) => {
+                    if (child instanceof THREE.Mesh) meshCount++;
                     if (child.geometry) child.geometry.dispose();
                     if (child.material) child.material.dispose();
+                    if (child.texture) child.texture.dispose();
                 });
                 scene.remove(ghostGrid);
                 ghostGrid = null;
             }
 
-            // Remove legacy/demo content
+            // Remove legacy/demo content with broader matching
             const legacyGroups = scene.children.filter(child =>
                 child.name === 'hardcoded-environment' ||
+                child.name === 'imported-group' ||
                 child.name.includes('debug') ||
                 child.name.includes('lobby') ||
-                child.name.includes('demo')
+                child.name.includes('demo') ||
+                child.name.includes('scene') ||
+                child.name.includes('floor') ||
+                child.name.includes('wall') ||
+                child.name.includes('helper')
             );
 
             legacyGroups.forEach(group => {
                 group.traverse((child) => {
+                    if (child instanceof THREE.Mesh) meshCount++;
                     if (child.geometry) child.geometry.dispose();
                     if (child.material) {
                         if (Array.isArray(child.material)) {
@@ -397,8 +412,29 @@
                             child.material.dispose();
                         }
                     }
+                    if (child.texture) child.texture.dispose();
                 });
                 scene.remove(group);
+            });
+
+            // Remove any orphaned meshes directly in scene
+            const orphanedMeshes = scene.children.filter(child =>
+                child instanceof THREE.Mesh &&
+                child.name !== 'referencePole' // Keep reference pole
+            );
+
+            orphanedMeshes.forEach(mesh => {
+                meshCount++;
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) {
+                    if (Array.isArray(mesh.material)) {
+                        mesh.material.forEach(m => m.dispose());
+                    } else {
+                        mesh.material.dispose();
+                    }
+                }
+                if (mesh.texture) mesh.texture.dispose();
+                scene.remove(mesh);
             });
 
             // Recreate basic lighting if needed
@@ -417,15 +453,15 @@
                 scene.add(directionalLight);
             }
 
-            console.log('[SCENE:CLEAR] Scene cleared and basic lighting restored');
+            console.log(`[SCENE:v1] scene cleared (prev meshes: ${meshCount}, gpu resources disposed)`);
         }
 
         /**
          * Setup simulator environment with global rules enforcement
          */
         function setupSimEnvironment(simLimits, cellMeters) {
-            const gridWidth = simLimits.maxTilesX;
-            const gridHeight = simLimits.maxTilesY;
+            const gridWidth = simLimits.maxTilesX || simLimits.gridWidth;
+            const gridHeight = simLimits.maxTilesY || simLimits.gridHeight;
 
             // Calculate world bounds
             currentWorldBounds = {
@@ -491,7 +527,154 @@
             scene.add(ghostGrid);
 
             console.log(`[SCENE:v1:ENV] gridLimits=${gridWidth}×${gridHeight}, axes=Z_up_XY_ground`);
-            console.log(`[SCENE:v1] bounds: min=(0,0,0) max=(${currentWorldBounds.max.x},${currentWorldBounds.max.y},${currentWorldBounds.max.z}) centre=(${currentWorldBounds.center.x},${currentWorldBounds.center.y},${currentWorldBounds.center.z})`);
+            console.log(`[SCENE:v1:ENV] bounds: min=(0,0,0) max=(${currentWorldBounds.max.x},${currentWorldBounds.max.y},${currentWorldBounds.max.z}) centre=(${currentWorldBounds.center.x},${currentWorldBounds.center.y},${currentWorldBounds.center.z})`);
+        }
+
+        /**
+         * Frame camera to content bounds with margin
+         */
+        function frameCameraToContent() {
+            if (!currentContentBounds) return;
+
+            const bounds = currentContentBounds;
+            const size = bounds.max.clone().sub(bounds.min);
+            const maxDim = Math.max(size.x, size.z);
+            const distance = maxDim * 1.5; // Content margin
+
+            camera.position.set(
+                bounds.center.x + distance * 0.7,
+                bounds.center.y + distance * 0.5,
+                bounds.center.z + distance * 0.7
+            );
+            camera.lookAt(bounds.center);
+            console.log('📷 Camera framed to content bounds');
+        }
+
+        /**
+         * Frame camera to environment grid bounds
+         */
+        function frameCameraToGrid() {
+            if (!currentEnvBounds) return;
+
+            const bounds = currentEnvBounds;
+            const size = bounds.max.clone().sub(bounds.min);
+            const maxDim = Math.max(size.x, size.z);
+            const distance = maxDim * 0.8; // Grid margin (wider view)
+
+            camera.position.set(
+                bounds.center.x + distance * 0.7,
+                bounds.center.y + distance * 0.3,
+                bounds.center.z + distance * 0.7
+            );
+            camera.lookAt(bounds.center);
+            console.log('📷 Camera framed to environment grid');
+        }
+
+        /**
+         * Create debug parity overlay showing tile centres and edge segments
+         */
+        function createParityOverlay(sceneData) {
+            if (!sceneData) return null;
+
+            const overlay = new THREE.Group();
+            overlay.name = "parityOverlay";
+
+            const { tiles, edges, units, originOffset } = sceneData;
+            const cellMeters = units.cellMeters;
+
+            // Tile centres as small points
+            const tileMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            tiles.floor.forEach(([x, y]) => {
+                const worldX = (x + originOffset.x + 0.5) * cellMeters;
+                const worldZ = (y + originOffset.y + 0.5) * cellMeters;
+
+                const point = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.05, 8, 6),
+                    tileMaterial
+                );
+                point.position.set(worldX, 0.1, worldZ);
+                overlay.add(point);
+            });
+
+            // Edge segments as thin lines
+            const hEdgeMaterial = new THREE.LineBasicMaterial({
+                color: 0xff0000,  // Red for horizontal
+                transparent: true,
+                opacity: 0.9
+            });
+            const vEdgeMaterial = new THREE.LineBasicMaterial({
+                color: 0x0000ff,  // Blue for vertical
+                transparent: true,
+                opacity: 0.9
+            });
+
+            // Horizontal edges
+            edges.horizontal.forEach(([x, y]) => {
+                const worldX = (x + originOffset.x + 0.5) * cellMeters;
+                const worldZ = (y + originOffset.y) * cellMeters;
+
+                const points = [
+                    new THREE.Vector3(worldX - cellMeters/2, 0.05, worldZ),
+                    new THREE.Vector3(worldX + cellMeters/2, 0.05, worldZ)
+                ];
+
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, hEdgeMaterial);
+                overlay.add(line);
+            });
+
+            // Vertical edges
+            edges.vertical.forEach(([x, y]) => {
+                const worldX = (x + originOffset.x) * cellMeters;
+                const worldZ = (y + originOffset.y + 0.5) * cellMeters;
+
+                const points = [
+                    new THREE.Vector3(worldX, 0.05, worldZ - cellMeters/2),
+                    new THREE.Vector3(worldX, 0.05, worldZ + cellMeters/2)
+                ];
+
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, vEdgeMaterial);
+                overlay.add(line);
+            });
+
+            return overlay;
+        }
+
+        /**
+         * Toggle debug parity overlay
+         */
+        function toggleParityOverlay() {
+            if (!sceneV1) {
+                console.log('[DEBUG] No scene loaded - cannot show parity overlay');
+                return;
+            }
+
+            if (parityOverlayVisible && parityOverlay) {
+                // Hide overlay
+                scene.remove(parityOverlay);
+                parityOverlay = null;
+                parityOverlayVisible = false;
+                console.log('[DEBUG] Parity overlay hidden');
+            } else {
+                // Create and show overlay
+                // We need to get the original scene data - store it during load
+                if (window.lastLoadedSceneData) {
+                    parityOverlay = createParityOverlay(window.lastLoadedSceneData);
+                    if (parityOverlay) {
+                        scene.add(parityOverlay);
+                        parityOverlayVisible = true;
+                        console.log('[DEBUG] Parity overlay shown (green=tiles, red=H edges, blue=V edges)');
+                    }
+                } else {
+                    console.log('[DEBUG] No scene data available for parity overlay');
+                }
+            }
         }
 
         /**
@@ -517,8 +700,6 @@
         function validateSceneV1(scene) {
             const requiredFields = [
                 'meta.schema',
-                'meta.simLimits.maxTilesX',
-                'meta.simLimits.maxTilesY',
                 'units.cellMeters',
                 'meta.axes',
                 'tiles.floor',
@@ -553,6 +734,21 @@
             // Check axes format
             if (scene.meta?.axes && !scene.meta.axes.endsWith('_XY_ground')) {
                 missingFields.push('meta.axes (must end with "_XY_ground")');
+            }
+
+            // Check simLimits (accept either format)
+            if (!scene.meta?.simLimits) {
+                missingFields.push('meta.simLimits');
+            } else {
+                const simLimits = scene.meta.simLimits;
+                const hasMaxTiles = ('maxTilesX' in simLimits && 'maxTilesY' in simLimits);
+                const hasGridDims = ('gridWidth' in simLimits && 'gridHeight' in simLimits);
+
+                if (!hasMaxTiles && !hasGridDims) {
+                    missingFields.push('meta.simLimits.maxTilesX/maxTilesY or meta.simLimits.gridWidth/gridHeight');
+                } else if (hasMaxTiles && hasGridDims) {
+                    console.warn('[SCENE:v1] Both maxTiles and gridDims present, preferring maxTilesX/Y');
+                }
             }
 
             return missingFields;
@@ -591,27 +787,25 @@
                 // Setup simulator environment
                 setupSimEnvironment(sceneData.meta.simLimits, sceneData.units.cellMeters);
 
+                // Store scene data for debug overlay
+                window.lastLoadedSceneData = sceneData;
+
                 // Load the scene using the v1 loader
                 sceneV1 = await window.loadScene3dV1(sceneData);
                 sceneV1.name = "sceneV1";
                 scene.add(sceneV1);
 
-                // Position camera based on scene bounds
-                if (sceneV1.bounds) {
-                    const bounds = sceneV1.bounds;
-                    const size = bounds.max.clone().sub(bounds.min);
-                    const maxDim = Math.max(size.x, size.z);
-                    const distance = maxDim * 1.5;
-
-                    camera.position.set(
-                        bounds.center.x + distance * 0.7,
-                        bounds.center.y + distance * 0.5,
-                        bounds.center.z + distance * 0.7
-                    );
-                    camera.lookAt(bounds.center);
-                    cameraPositioned = true;
-                    console.log('📷 Camera positioned for v1 scene bounds:', bounds);
+                // Store bounds for camera positioning and movement clamping
+                if (sceneV1.contentBounds) {
+                    currentContentBounds = sceneV1.contentBounds;
                 }
+                if (sceneV1.envBounds) {
+                    currentEnvBounds = sceneV1.envBounds;
+                }
+
+                // Frame camera to content (not environment)
+                frameCameraToContent();
+                cameraPositioned = true;
 
                 console.log('[SCENE:v1] ✅ Scene loaded successfully');
 
@@ -672,21 +866,16 @@
                 sceneV1.name = "sceneV1";
                 scene.add(sceneV1);
 
-                // Position camera based on scene bounds
-                if (sceneV1.bounds) {
-                    const bounds = sceneV1.bounds;
-                    const size = bounds.max.clone().sub(bounds.min);
-                    const maxDim = Math.max(size.x, size.z);
-                    const distance = maxDim * 1.5;
-
-                    camera.position.set(
-                        bounds.center.x + distance * 0.7,
-                        bounds.center.y + distance * 0.5,
-                        bounds.center.z + distance * 0.7
-                    );
-                    camera.lookAt(bounds.center);
-                    console.log('📷 Camera positioned for imported scene bounds:', bounds);
+                // Store bounds for camera positioning and movement clamping
+                if (sceneV1.contentBounds) {
+                    currentContentBounds = sceneV1.contentBounds;
                 }
+                if (sceneV1.envBounds) {
+                    currentEnvBounds = sceneV1.envBounds;
+                }
+
+                // Frame camera to content (not environment)
+                frameCameraToContent();
 
                 console.log('[SCENE:v1] ✅ Imported scene loaded successfully');
 
@@ -762,25 +951,23 @@
                 clearSceneForImport(scene);
                 setupSimEnvironment(sceneData.meta.simLimits, sceneData.units.cellMeters);
 
+                // Store scene data for debug overlay
+                window.lastLoadedSceneData = sceneData;
+
                 sceneV1 = await window.loadScene3dV1(sceneData);
                 sceneV1.name = "sceneV1";
                 scene.add(sceneV1);
 
-                // Position camera based on scene bounds
-                if (sceneV1.bounds) {
-                    const bounds = sceneV1.bounds;
-                    const size = bounds.max.clone().sub(bounds.min);
-                    const maxDim = Math.max(size.x, size.z);
-                    const distance = maxDim * 1.5;
-
-                    camera.position.set(
-                        bounds.center.x + distance * 0.7,
-                        bounds.center.y + distance * 0.5,
-                        bounds.center.z + distance * 0.7
-                    );
-                    camera.lookAt(bounds.center);
-                    console.log('📷 Camera positioned for dropped scene bounds:', bounds);
+                // Store bounds for camera positioning and movement clamping
+                if (sceneV1.contentBounds) {
+                    currentContentBounds = sceneV1.contentBounds;
                 }
+                if (sceneV1.envBounds) {
+                    currentEnvBounds = sceneV1.envBounds;
+                }
+
+                // Frame camera to content (not environment)
+                frameCameraToContent();
 
                 console.log('[SCENE:v1] ✅ Dropped scene loaded successfully');
 
@@ -1840,6 +2027,23 @@
                 createFloatingText('💃🕺', player.position);
             }
             
+            // Camera framing hotkeys
+            if (e.key.toLowerCase() === 'c') {
+                e.preventDefault();
+                frameCameraToContent();
+            }
+
+            if (e.key.toLowerCase() === 'g') {
+                e.preventDefault();
+                frameCameraToGrid();
+            }
+
+            // Debug parity overlay toggle
+            if (e.key.toLowerCase() === 'p') {
+                e.preventDefault();
+                toggleParityOverlay();
+            }
+
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                 e.preventDefault();
             }

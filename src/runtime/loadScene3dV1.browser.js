@@ -17,6 +17,13 @@
     // Flag for debug visualization
     const SCENE_DEBUG = false;
 
+    // ========================================================================
+    // CONSTANTS - Centralized EPS and Material Settings
+    // ========================================================================
+
+    const SEAM_EPS = 0.001; // Small overlap to prevent seams between adjacent geometry
+    const GRID_OFFSET_Y = 0.001; // Offset for grid lines to prevent z-fighting
+
     /**
      * Convert v1 scene data to internal Layout format for existing builders
      */
@@ -93,7 +100,6 @@
      */
     function buildFloorsV1(layout, cellMeters, floorThickness) {
         const { width, height, cells } = layout;
-        const EPS = 0.001; // Small overlap to prevent seams
 
         // Create lookup map for fast cell access
         const cellMap = new Map();
@@ -136,9 +142,9 @@
 
                 // Create floor geometry with EPS overlap to prevent seams
                 const geometry = new THREE.BoxGeometry(
-                    stripLength * cellMeters + EPS, // Add EPS for overlap
+                    stripLength * cellMeters + SEAM_EPS, // Add EPS for overlap
                     floorThickness,
-                    cellMeters + EPS // Add EPS for overlap
+                    cellMeters + SEAM_EPS // Add EPS for overlap
                 );
 
                 const material = new THREE.MeshStandardMaterial({
@@ -175,7 +181,6 @@
     function buildWallsV1(edges, cellMeters, wallHeight, wallThickness) {
         const wallsGroup = new THREE.Group();
         wallsGroup.name = "walls";
-        const EPS = 0.001; // Small extension to meet floors without gaps
 
         // Single material for all walls
         const material = new THREE.MeshStandardMaterial({
@@ -196,7 +201,7 @@
                 // Horizontal edge: oriented along +X
                 // Add EPS extension to meet floors without gaps
                 geometry = new THREE.BoxGeometry(
-                    cellMeters + EPS,      // Length with EPS extension
+                    cellMeters + SEAM_EPS,      // Length with EPS extension
                     wallHeight,            // Height
                     wallThickness          // Thickness
                 );
@@ -214,7 +219,7 @@
                 geometry = new THREE.BoxGeometry(
                     wallThickness,         // Thickness
                     wallHeight,            // Height
-                    cellMeters + EPS       // Length with EPS extension
+                    cellMeters + SEAM_EPS       // Length with EPS extension
                 );
                 // Centre at (x, y+0.5) in cell space
                 const cellCenterX = edge.x;
@@ -374,20 +379,40 @@
         // Validate parity
         validateParity(scene);
 
-        // Calculate dimensions for logging
-        const offsetTiles = scene.tiles.floor.map(([x, y]) => [x + scene.originOffset.x, y + scene.originOffset.y]);
-        const minX = offsetTiles.length > 0 ? Math.min(...offsetTiles.map(([x]) => x)) : 0;
-        const maxX = offsetTiles.length > 0 ? Math.max(...offsetTiles.map(([x]) => x)) : 0;
-        const minY = offsetTiles.length > 0 ? Math.min(...offsetTiles.map(([, y]) => y)) : 0;
-        const maxY = offsetTiles.length > 0 ? Math.max(...offsetTiles.map(([, y]) => y)) : 0;
-        const tilesWidth = maxX - minX + 1;
-        const tilesHeight = maxY - minY + 1;
+        // Calculate content size from tile extents (before applying originOffset)
+        const rawTiles = scene.tiles.floor;
+        let contentWidth = 0, contentHeight = 0;
 
-        // Log scene info
-        console.log(`[SCENE:v1] tiles=${scene.tiles.floor.length}, edgesH=${scene.edges.horizontal.length}, edgesV=${scene.edges.vertical.length}, w×h=${tilesWidth}×${tilesHeight}, cell=${cellMeters}m, originOffset=(${scene.originOffset.x},${scene.originOffset.y})`);
+        if (rawTiles.length > 0) {
+            const minX = Math.min(...rawTiles.map(([x]) => x));
+            const maxX = Math.max(...rawTiles.map(([x]) => x));
+            const minY = Math.min(...rawTiles.map(([, y]) => y));
+            const maxY = Math.max(...rawTiles.map(([, y]) => y));
+            contentWidth = maxX - minX + 1;
+            contentHeight = maxY - minY + 1;
+        }
 
-        // Store bounds for camera positioning
+        // Environment size from simLimits
+        const envWidth = meta.simLimits?.maxTilesX || meta.simLimits?.gridWidth || 60;
+        const envHeight = meta.simLimits?.maxTilesY || meta.simLimits?.gridHeight || 40;
+
+        // Log content metrics (separate from environment)
+        console.log(`[SCENE:v1] tiles=${scene.tiles.floor.length} edgesH=${scene.edges.horizontal.length} edgesV=${scene.edges.vertical.length} content=${contentWidth}×${contentHeight} tiles cell=${cellMeters}m originOffset=(${scene.originOffset.x},${scene.originOffset.y})`);
+
+        // Log environment metrics
+        console.log(`[SCENE:v1:ENV] gridLimits=${envWidth}×${envHeight} tiles axes=${meta.axes}`);
+
+        // Log environment bounds explicitly
+        console.log(`[SCENE:v1:ENV] bounds: min=(0,0,0) max=(${envWidth * cellMeters},${wallHeightMeters},${envHeight * cellMeters}) centre=(${envWidth * cellMeters / 2},${wallHeightMeters / 2},${envHeight * cellMeters / 2})`);
+
+        // Store bounds for camera positioning (content bounds, not env bounds)
         sceneGroup.bounds = bounds;
+        sceneGroup.contentBounds = bounds; // Content AABB
+        sceneGroup.envBounds = {
+            min: new THREE.Vector3(0, 0, 0),
+            max: new THREE.Vector3(envWidth * cellMeters, wallHeightMeters, envHeight * cellMeters),
+            center: new THREE.Vector3(envWidth * cellMeters / 2, wallHeightMeters / 2, envHeight * cellMeters / 2)
+        };
 
         return sceneGroup;
     }

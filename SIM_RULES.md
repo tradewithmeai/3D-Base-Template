@@ -55,7 +55,21 @@ The 3D-Base-Template simulator enforces these rules at the engine level, not in 
 - **Schema Validation**: Strict validation of scene.3d.v1 format
 - **Missing Fields**: Detailed error reporting for invalid/incomplete scenes
 - **Parity Checking**: Validate expected vs actual tile/edge counts
-- **Bounds Logging**: Report world bounds and scene statistics after load
+- **Content vs Environment Logging**: Separate metrics for content size vs environment grid
+- **Bounds Logging**: Report environment bounds and scene statistics after load
+
+### Logging Format
+- **Content Metrics**: `[SCENE:v1] tiles=<N> edgesH=<H> edgesV=<V> content=<w×h> tiles cell=<cellMeters>m originOffset=(ox,oy)`
+- **Environment Metrics**: `[SCENE:v1:ENV] gridLimits=<W×H> tiles axes=<axes>`
+- **Environment Bounds**: `[SCENE:v1:ENV] bounds: min=(0,0,0) max=(Wm,3,Hm) centre=(Wm/2,1.5,Hm/2)`
+- **Scene Clearing**: `[SCENE:v1] scene cleared (prev meshes: <count>, gpu resources disposed)`
+
+### Camera Framing Policy
+- **Content-First**: Camera frames to content bounds on load/import (not environment grid)
+- **Hotkey Navigation**:
+  - `C` → Centre on Content: reframe to content AABB with margin
+  - `G` → Centre on Grid: reframe to environment bounds (full ghost grid)
+- **Movement Bounds**: Player movement remains clamped to environment bounds regardless of camera framing
 
 ## Loader Responsibilities (Parse Only)
 
@@ -96,10 +110,20 @@ The 3D-Base-Template simulator enforces these rules at the engine level, not in 
 
 ## Implementation Notes
 
-### EPS Tolerances
-- **Floor Overlap**: 0.001m overlap between adjacent floor strips
-- **Wall Extension**: 0.001m extension to close gaps with floors
-- **Grid Offset**: Grid lines at Y=+0.001 to prevent z-fighting with ground plane
+### EPS Tolerances (Centralized Constants)
+- **SEAM_EPS**: 0.001m - Overlap between adjacent geometry to prevent seams
+- **GRID_OFFSET_Y**: 0.001m - Grid lines offset to prevent z-fighting with ground plane
+- **Floor Overlap**: Adjacent floor strips use SEAM_EPS overlap for continuous coverage
+- **Wall Extension**: Wall segments use SEAM_EPS extension to meet at corners and overlap floors
+- **Implementation**: All EPS values centralized in loadScene3dV1.browser.js constants section
+
+### Debug Features
+- **Parity Overlay**: Press `P` to toggle visual overlay showing:
+  - Green spheres: Tile centres
+  - Red lines: Horizontal edge segments
+  - Blue lines: Vertical edge segments
+- **Non-Pickable**: Overlay renders above ghost grid and doesn't interfere with interaction
+- **Validation**: Confirms exact alignment between scene data and rendered geometry
 
 ### Performance Considerations
 - **Floor Strips**: Compose contiguous tiles into single geometry instances
