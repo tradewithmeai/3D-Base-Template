@@ -19,6 +19,13 @@ import { Layout, Edge } from './types.js';
 // Flag for debug visualization
 const SCENE_DEBUG = false;
 
+// Trace flag for geometry placement debugging (set via URL param ?trace=1)
+let TRACE_GEOM = false;
+if (typeof window !== 'undefined') {
+  const urlParams = new URLSearchParams(window.location.search);
+  TRACE_GEOM = urlParams.get('trace') === '1';
+}
+
 interface Scene3dV1 {
   meta: {
     schema: string;
@@ -192,12 +199,20 @@ function buildFloorsV1(layout: Layout, cellMeters: number, floorThickness: numbe
       // Cell centre: (x + stripLength/2 - 0.5, y + 0.5) in cell space
       const cellCenterX = x + stripLength / 2 - 0.5;
       const cellCenterY = y + 0.5;
+      const worldX = cellCenterX * cellMeters;
+      const worldY = floorThickness / 2;
+      const worldZ = cellCenterY * cellMeters;
 
-      floor.position.set(
-        cellCenterX * cellMeters,  // World X
-        floorThickness / 2,        // World Y (bottom at 0)
-        cellCenterY * cellMeters   // World Z
-      );
+      floor.position.set(worldX, worldY, worldZ);
+
+      // Trace logging for floor strips
+      if (TRACE_GEOM) {
+        const minX = (x * cellMeters).toFixed(3);
+        const maxX = ((x + stripLength) * cellMeters).toFixed(3);
+        const minZ = ((y * cellMeters)).toFixed(3);
+        const maxZ = (((y + 1) * cellMeters)).toFixed(3);
+        console.log(`[TRACE:FLOOR] strip start=(${x},${y}) len=${stripLength} cellCenter=(${cellCenterX.toFixed(1)},${cellCenterY.toFixed(1)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) extents=(${minX},${minZ})→(${maxX},${maxZ})`);
+      }
 
       floorsGroup.add(floor);
     }
@@ -232,11 +247,18 @@ function buildWallsV1(edges: Edge[], cellMeters: number, wallHeight: number, wal
       // Centre at (x+0.5, y) in cell space
       const cellCenterX = edge.x + 0.5;
       const cellCenterY = edge.y;
-      position = new THREE.Vector3(
-        cellCenterX * cellMeters,
-        wallHeight / 2,
-        cellCenterY * cellMeters
-      );
+      const worldX = cellCenterX * cellMeters;
+      const worldY = wallHeight / 2;
+      const worldZ = cellCenterY * cellMeters;
+      position = new THREE.Vector3(worldX, worldY, worldZ);
+
+      // Trace logging for horizontal edges
+      if (TRACE_GEOM) {
+        const halfLen = cellMeters / 2;
+        const minZ = worldZ - wallThickness / 2;
+        const maxZ = worldZ + wallThickness / 2;
+        console.log(`[TRACE:H] grid=(${edge.x},${edge.y}) cellCenter=(${cellCenterX.toFixed(1)},${cellCenterY.toFixed(1)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) halfLen=${halfLen.toFixed(3)} thickness=${wallThickness.toFixed(3)} minZ=${minZ.toFixed(3)} maxZ=${maxZ.toFixed(3)}`);
+      }
     } else {
       // Vertical edge: oriented along +Z
       // Length = cellMeters, width = wallThickness, height = wallHeight
@@ -244,11 +266,18 @@ function buildWallsV1(edges: Edge[], cellMeters: number, wallHeight: number, wal
       // Centre at (x, y+0.5) in cell space
       const cellCenterX = edge.x;
       const cellCenterY = edge.y + 0.5;
-      position = new THREE.Vector3(
-        cellCenterX * cellMeters,
-        wallHeight / 2,
-        cellCenterY * cellMeters
-      );
+      const worldX = cellCenterX * cellMeters;
+      const worldY = wallHeight / 2;
+      const worldZ = cellCenterY * cellMeters;
+      position = new THREE.Vector3(worldX, worldY, worldZ);
+
+      // Trace logging for vertical edges
+      if (TRACE_GEOM) {
+        const halfLen = cellMeters / 2;
+        const minX = worldX - wallThickness / 2;
+        const maxX = worldX + wallThickness / 2;
+        console.log(`[TRACE:V] grid=(${edge.x},${edge.y}) cellCenter=(${cellCenterX.toFixed(1)},${cellCenterY.toFixed(1)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) halfLen=${halfLen.toFixed(3)} thickness=${wallThickness.toFixed(3)} minX=${minX.toFixed(3)} maxX=${maxX.toFixed(3)}`);
+      }
     }
 
     const wall = new THREE.Mesh(geometry, material);

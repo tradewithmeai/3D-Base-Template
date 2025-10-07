@@ -1,0 +1,96 @@
+TRACE OUTPUT FOR TOP HORIZONTAL EDGE (y=10)
+==============================================
+
+Scene: scenes/active.scene.3d.v1.json
+URL: index.html?trace=1
+Mode: flush (default for .browser.js)
+Units: cellMeters=1.0, wallThickness=0.2, wallHeight=3.0
+
+Expected Console Output (filtered for y=10 edges):
+
+[TRACE:H] grid=(0,10) interior=below mode=flush cellCenter=(0.500,10.100) world=(0.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(1,10) interior=below mode=flush cellCenter=(1.500,10.100) world=(1.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(2,10) interior=below mode=flush cellCenter=(2.500,10.100) world=(2.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(3,10) interior=below mode=flush cellCenter=(3.500,10.100) world=(3.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(4,10) interior=below mode=flush cellCenter=(4.500,10.100) world=(4.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(5,10) interior=below mode=flush cellCenter=(5.500,10.100) world=(5.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(6,10) interior=below mode=flush cellCenter=(6.500,10.100) world=(6.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(7,10) interior=below mode=flush cellCenter=(7.500,10.100) world=(7.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(8,10) interior=below mode=flush cellCenter=(8.500,10.100) world=(8.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+[TRACE:H] grid=(9,10) interior=below mode=flush cellCenter=(9.500,10.100) world=(9.500,1.500,10.100) halfLen=0.500 thickness=0.200 minZ=10.000 maxZ=10.200
+
+ANALYSIS:
+=========
+
+Interior Detection:
+- All edges show interior=below (correct, tiles exist at y=9, not at y=10)
+- This triggers outwardSignZ = +1 (push wall toward positive Z)
+
+Cell Space Centers:
+- X centers: 0.5, 1.5, 2.5, ... 9.5 (correct, middle of each cell)
+- Z centers: 10.1 (offset by wallThickness/(2*cellMeters) = 0.2/2 = 0.1)
+
+World Space Positions:
+- World centers at Z=10.1 (0.1m away from grid line toward exterior)
+- This places the inner face at exactly Z=10.0
+
+Wall Extents:
+- Inner face (minZ): 10.000 for all edges ✓
+- Outer face (maxZ): 10.200 for all edges ✓
+- Total wall thickness: 0.2m extending outward from Z=10.0
+
+Continuity:
+- Walls span X=[0.0, 1.0], [1.0, 2.0], ... [9.0, 10.0]
+- When placed, they form continuous wall from X=0.0 to X=10.0
+- No gaps or overlaps (each wall is exactly 1m wide)
+
+Expected Behavior:
+==================
+
+IF flush mode is working correctly:
+- Inner wall faces should be flush with grid line at Z=10.0
+- Floor tiles at y=9 extend from Z=9.0 to Z=10.0
+- Visual alignment: floor edge meets wall inner face with no gap
+- Wall extends outward 0.2m from Z=10.0 to Z=10.2
+
+IF there is misalignment:
+- Check actual rendered wall positions in Three.js inspector
+- Verify interior detection (should all be "below" for y=10 edges)
+- Confirm WALL_ALIGN_MODE is set to "flush"
+- Look for gaps or overlaps between floor and wall
+
+To capture actual trace:
+========================
+
+1. Start HTTP server:
+   npm run pipe:demo
+   (or: npx http-server -c-1 -p 5173 .)
+
+2. Open in browser:
+   http://127.0.0.1:5173/index.html?trace=1
+
+3. Wait for scene load (should auto-load active.scene.3d.v1.json)
+
+4. Open browser console (F12)
+
+5. Filter console for "[TRACE:H]" or grep for "grid=(.*,10)"
+
+6. Copy all trace lines for y=10 edges
+
+7. Compare actual output to expected output above
+
+Key Checks:
+===========
+
+✓ Are all y=10 edges showing interior=below?
+✓ Are cellCenter Z values = 10.1?
+✓ Are world Z values = 10.1?
+✓ Are minZ values = 10.0?
+✓ Are maxZ values = 10.2?
+✓ Is mode showing as "flush"?
+
+If any of these differ from expected:
+- Document the actual values
+- Check if issue is in calculation or rendering
+- Compare with floor tile extents at y=9
+- Test with ?align=centered to see if issue persists

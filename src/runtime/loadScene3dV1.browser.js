@@ -27,6 +27,9 @@
     // Wall alignment mode - can be 'flush' or 'centered'
     const WALL_ALIGN_MODE = (new URLSearchParams(window.location?.search || '').get('align') === 'centered') ? 'centered' : 'flush';
 
+    // Trace flag for geometry placement debugging (set via URL param ?trace=1)
+    const TRACE_GEOM = new URLSearchParams(window.location?.search || '').get('trace') === '1';
+
     /**
      * Convert v1 scene data to internal Layout format for existing builders
      */
@@ -164,12 +167,20 @@
                 // Cell centre: (x + stripLength/2, y + 0.5) in cell space
                 const cellCenterX = x + stripLength / 2;
                 const cellCenterY = y + 0.5;
+                const worldX = cellCenterX * cellMeters;
+                const worldY = floorThickness / 2;
+                const worldZ = cellCenterY * cellMeters;
 
-                floor.position.set(
-                    cellCenterX * cellMeters,  // World X
-                    floorThickness / 2,        // World Y (bottom at 0)
-                    cellCenterY * cellMeters   // World Z
-                );
+                floor.position.set(worldX, worldY, worldZ);
+
+                // Trace logging for floor strips
+                if (TRACE_GEOM) {
+                    const minX = (x * cellMeters).toFixed(3);
+                    const maxX = ((x + stripLength) * cellMeters).toFixed(3);
+                    const minZ = ((y * cellMeters)).toFixed(3);
+                    const maxZ = (((y + 1) * cellMeters)).toFixed(3);
+                    console.log(`[TRACE:FLOOR] strip start=(${x},${y}) len=${stripLength} cellCenter=(${cellCenterX.toFixed(1)},${cellCenterY.toFixed(1)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) extents=(${minX},${minZ})→(${maxX},${maxZ})`);
+                }
 
                 floorsGroup.add(floor);
             }
@@ -266,11 +277,21 @@
                 }
 
                 // Use normalized coordinates (like floors) - originOffset already applied in v1ToEdges
-                position = new THREE.Vector3(
-                    centreX * cellMeters,
-                    wallHeight / 2,
-                    centreZ * cellMeters
-                );
+                const worldX = centreX * cellMeters;
+                const worldY = wallHeight / 2;
+                const worldZ = centreZ * cellMeters;
+                position = new THREE.Vector3(worldX, worldY, worldZ);
+
+                // Trace logging for horizontal edges
+                if (TRACE_GEOM) {
+                    const halfLen = cellMeters / 2;
+                    const minZ = worldZ - wallThickness / 2;
+                    const maxZ = worldZ + wallThickness / 2;
+                    const interiorBelow = hasTile(edge.x, edge.y - 1) && !hasTile(edge.x, edge.y);
+                    const interiorAbove = hasTile(edge.x, edge.y) && !hasTile(edge.x, edge.y - 1);
+                    const interiorSide = interiorBelow && !interiorAbove ? 'below' : (interiorAbove && !interiorBelow ? 'above' : 'unknown');
+                    console.log(`[TRACE:H] grid=(${edge.x},${edge.y}) interior=${interiorSide} mode=${WALL_ALIGN_MODE} cellCenter=(${centreX.toFixed(3)},${centreZ.toFixed(3)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) halfLen=${halfLen.toFixed(3)} thickness=${wallThickness.toFixed(3)} minZ=${minZ.toFixed(3)} maxZ=${maxZ.toFixed(3)}`);
+                }
 
             } else {
                 // Vertical edge: oriented along +Z, spans (x,y) → (x,y+1)
@@ -307,11 +328,21 @@
                 }
 
                 // Use normalized coordinates (like floors) - originOffset already applied in v1ToEdges
-                position = new THREE.Vector3(
-                    centreX * cellMeters,
-                    wallHeight / 2,
-                    centreZ * cellMeters
-                );
+                const worldX = centreX * cellMeters;
+                const worldY = wallHeight / 2;
+                const worldZ = centreZ * cellMeters;
+                position = new THREE.Vector3(worldX, worldY, worldZ);
+
+                // Trace logging for vertical edges
+                if (TRACE_GEOM) {
+                    const halfLen = cellMeters / 2;
+                    const minX = worldX - wallThickness / 2;
+                    const maxX = worldX + wallThickness / 2;
+                    const interiorLeft = hasTile(edge.x - 1, edge.y) && !hasTile(edge.x, edge.y);
+                    const interiorRight = hasTile(edge.x, edge.y) && !hasTile(edge.x - 1, edge.y);
+                    const interiorSide = interiorLeft && !interiorRight ? 'left' : (interiorRight && !interiorLeft ? 'right' : 'unknown');
+                    console.log(`[TRACE:V] grid=(${edge.x},${edge.y}) interior=${interiorSide} mode=${WALL_ALIGN_MODE} cellCenter=(${centreX.toFixed(3)},${centreZ.toFixed(3)}) world=(${worldX.toFixed(3)},${worldY.toFixed(3)},${worldZ.toFixed(3)}) halfLen=${halfLen.toFixed(3)} thickness=${wallThickness.toFixed(3)} minX=${minX.toFixed(3)} maxX=${maxX.toFixed(3)}`);
+                }
             }
 
             const wall = new THREE.Mesh(geometry, material);
